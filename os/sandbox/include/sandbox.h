@@ -26,6 +26,7 @@
 #define SANDBOX_ERR_CGROUP     -8   /* cgroup create/attach failed */
 #define SANDBOX_ERR_NS         -9 
 #define SANDBOX_ERR_SECCOMP   -10
+#define SANDBOX_ERR_WATCHDOG  -11
 
 typedef struct {
     /* --- Execution --- */
@@ -35,6 +36,7 @@ typedef struct {
     size_t             stdin_len;
     size_t             output_limit;
     unsigned int       timeout_ms;
+    unsigned int       grace_ms; 
 
     /* --- rlimits (step 3) --- */
     unsigned int       cpu_seconds;
@@ -52,7 +54,7 @@ typedef struct {
     uint64_t           cgroup_io_read_bps;
     uint64_t           cgroup_io_write_bps;
 
-        /* --- namespaces (step 5) --- */
+    /* --- namespaces (step 5) --- */
     int                enable_pid_ns;
     int                enable_mount_ns;
     int                enable_net_ns;
@@ -101,6 +103,11 @@ typedef struct {
 
     /* --- seccomp diagnostics (step 6) --- */
     int      seccomp_violation;   /* 1 if child died from SIGSYS */
+
+    long     timed_out_elapsed_ms;  /* elapsed_ms at deadline */
+    int      timed_out;             /* 1 if watchdog fired */
+    int      term_sent;             /* 1 if SIGTERM was sent */
+    int      kill_sent;             /* 1 if SIGKILL was sent */
 } sandbox_result_t;
 
 int sandbox_run(const sandbox_config_t *config, sandbox_result_t *result);

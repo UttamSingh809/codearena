@@ -3,15 +3,18 @@
  *
  * This file is the user-facing entry point for the sandbox binary.
  * It parses command-line options, builds a sandbox_config_t, calls
- * sandbox_run(), and prints a formatted report of the results.
+ * sandbox_run(), runs the verdict engine, and prints a formatted
+ * report of the results.
  *
- * Scope as of Step 6:
+ * Scope as of Step 7:
  *   - Execution:  binary path, stdin, output limit, wall-clock timeout
  *   - rlimits:    CPU seconds, file size, process count, stack, NOFILE
  *   - cgroups:    cpu.max, memory.max, pids.max via /sys/fs/cgroup
  *   - Namespaces: PID, mount, network, user, UTS, IPC
  *   - Rootfs:     pivot_root into a minimal filesystem with bind mounts
  *   - Seccomp:    whitelist-based syscall filter (C or Python profile)
+ *   - Watchdog:   wall-clock timeout via SIGTERM→SIGKILL escalation
+ *   - Verdict:    verdict engine combining all signals into AC/WA/TLE/...
  *
  * Examples:
  *   ./sandbox --binary ./tests/hello --input "codearena"
@@ -19,6 +22,9 @@
  *   ./sandbox --binary ./tests/memory_bomb --cgroup-memory 64
  *   ./sandbox --binary ./tests/show_ns --no-cgroup --all-ns
  *   ./sandbox --binary ./tests/hello --no-cgroup --all-ns --seccomp
+ *   ./sandbox --binary ./tests/sleep_forever --time 1000
+ *   ./sandbox --binary ./tests/hello --input "codearena" \
+ *       --expected-file /tmp/expected.txt
  *   ./sandbox --binary /bin/hello \
  *       --no-cgroup --user-ns --mnt-ns --pid-ns --seccomp \
  *       --rootfs "$PWD/rootfs" \
@@ -29,6 +35,8 @@
 
 #include "sandbox.h"
 #include "cgroup.h"
+#include "watchdog.h"
+#include "verdict.h"
 
 #include <errno.h>
 #include <getopt.h>
@@ -66,6 +74,7 @@ static void default_cgroup_name(char *dst, size_t dstsz)
  *   cgroups    — resource limits enforced by cgroup v2 filesystem
  *   Namespaces — isolation boundaries created by unshare()
  *   Seccomp    — syscall filtering via BPF whitelist
+ *   Watchdog   — wall-clock timeout and verdict determination
  */
 static void usage(const char *prog)
 {
@@ -77,7 +86,7 @@ static void usage(const char *prog)
         "  -i, --input STRING          stdin supplied to the program\n"
         "  -f, --input-file PATH       read stdin from a file instead\n"
         "  -o, --output-limit BYTES    cap per stream (default 65536)\n"
-        "  -t, --time MS               wall-clock timeout (step 7; default 2000)\n"
+        "  -t, --time MS               wall-clock timeout in ms (default 2000)\n"
         "\n"
         "rlimits (step 3):\n"
         "  -c, --cpu-seconds N         RLIMIT_CPU hard limit (default 2)\n"
@@ -111,6 +120,11 @@ static void usage(const char *prog)
         "      --seccomp               enable seccomp-BPF syscall whitelist\n"
         "      --seccomp-profile NAME  c (default) or python\n"
         "\n"
+        "Watchdog & verdict (step 7):\n"
+        "      --grace-ms MS           SIGTERM→SIGKILL grace period (default 500)\n"
+        "      --expected-file PATH    expected output file for verdict determination\n"
+        "      --strict-ws             require byte-exact output (no whitespace trim)\n"
+        "\n"
         "  -h, --help                  show this help\n",
         prog);
 }
@@ -139,34 +153,6 @@ static char *read_file(const char *path, size_t *out_len)
     buf[n] = '\0';
     *out_len = n;
     return buf;
-}
-
-/*
- * Convert a sandbox_result_t into a human-readable verdict string.
- *
- * The order of checks matters: the most specific signal wins.
- *   1. seccomp   — SIGSYS is unambiguous
- *   2. namespace — exit 125 from our die()
- *   3. OOM       — cgroup memory.events said so
- *   4. rlimits   — specific signals per resource
- *   5. generic   — any other signal
- *   6. exit code — normal process termination
- */
-static const char *describe_result(const sandbox_result_t *r)
-{
-    if (r->seccomp_violation)  return "SECCOMP VIOLATION (SIGSYS)";
-    if (r->ns_setup_failed)    return "NAMESPACE SETUP FAILED";
-    if (r->oom_killed)         return "MEMORY LIMIT (cgroup OOM)";
-    if (r->signal == SIGXCPU)  return "TIME LIMIT (CPU rlimit)";
-    if (r->signal == SIGXFSZ)  return "FILE SIZE LIMIT";
-    if (r->signal == SIGKILL)  return "KILLED (SIGKILL)";
-    if (r->signal)             return "TERMINATED BY SIGNAL";
-    if (r->exit_code == 0)     return "OK";
-    if (r->exit_code == 124)   return "SECCOMP SETUP FAILED";
-    if (r->exit_code == 125)   return "NAMESPACE SETUP FAILED";
-    if (r->exit_code == 126)   return "SANDBOX SETUP FAILED";
-    if (r->exit_code == 127)   return "EXEC FAILED";
-    return "NON-ZERO EXIT";
 }
 
 /*
@@ -214,7 +200,8 @@ static void print_limits_summary(const sandbox_config_t *cfg)
 static void print_isolation_summary(const sandbox_config_t *cfg)
 {
     printf("isolation:          ");
-    if (cfg->enable_seccomp) printf("seccomp(%s) ", cfg->seccomp_profile == 1 ? "python" : "c");
+    if (cfg->enable_seccomp) printf("seccomp(%s) ",
+                                    cfg->seccomp_profile == 1 ? "python" : "c");
     if (cfg->cgroup_root && cfg->cgroup_name) printf("cgroup ");
     if (cfg->enable_user_ns)  printf("userns ");
     if (cfg->enable_mount_ns) printf("mntns ");
@@ -239,7 +226,7 @@ int main(int argc, char **argv)
     const char  *input_str    = NULL;
     const char  *input_file   = NULL;
     size_t       output_limit = 64 * 1024;         /* 64 KB */
-    unsigned int timeout_ms   = 2000;              /* step 7 will use it */
+    unsigned int timeout_ms   = 2000;
 
     /* ---------------- rlimits (step 3) -------------------- */
     unsigned int cpu_seconds    = 2;
@@ -252,10 +239,10 @@ int main(int argc, char **argv)
     const char  *cgroup_root = "/sys/fs/cgroup/codearena";
     char         cgroup_name_buf[128] = {0};
     const char  *cgroup_name = NULL;
-    unsigned int cgroup_cpu    = 0;   /* 0 = no CPU rate limit */
-    unsigned int cgroup_memory = 0;   /* 0 = no memory limit  */
-    unsigned int cgroup_pids   = 0;   /* 0 = no pids limit    */
-    int          use_cgroup    = 1;   /* --no-cgroup turns this off */
+    unsigned int cgroup_cpu    = 0;
+    unsigned int cgroup_memory = 0;
+    unsigned int cgroup_pids   = 0;
+    int          use_cgroup    = 1;
 
     /* ---------------- Namespaces (step 5) ----------------- */
     int          enable_pid_ns   = 0;
@@ -285,6 +272,13 @@ int main(int argc, char **argv)
     int          enable_seccomp     = 0;
     int          seccomp_profile_id = 0;   /* 0 = C, 1 = Python */
 
+    /* ---------------- Watchdog & verdict (step 7) --------- */
+    unsigned int grace_ms      = 500;
+    const char  *expected_file = NULL;
+    char        *expected_buf  = NULL;
+    size_t       expected_len  = 0;
+    int          strict_ws     = 0;
+
     /* ---------------- Option parsing ---------------------- */
 
     /*
@@ -310,7 +304,10 @@ int main(int argc, char **argv)
         OPT_HOSTNAME,
         OPT_BIND,
         OPT_SECCOMP,
-        OPT_SECCOMP_PROFILE
+        OPT_SECCOMP_PROFILE,
+        OPT_GRACE_MS,
+        OPT_EXPECTED_FILE,
+        OPT_STRICT_WS
     };
 
     static struct option long_opts[] = {
@@ -347,6 +344,10 @@ int main(int argc, char **argv)
         /* seccomp */
         { "seccomp",         no_argument,       NULL, OPT_SECCOMP },
         { "seccomp-profile", required_argument, NULL, OPT_SECCOMP_PROFILE },
+        /* watchdog & verdict */
+        { "grace-ms",        required_argument, NULL, OPT_GRACE_MS },
+        { "expected-file",   required_argument, NULL, OPT_EXPECTED_FILE },
+        { "strict-ws",       no_argument,       NULL, OPT_STRICT_WS },
         /* help */
         { "help",            no_argument,       NULL, 'h' },
         { 0, 0, 0, 0 }
@@ -448,6 +449,19 @@ int main(int argc, char **argv)
             enable_seccomp = 1;   /* --seccomp-profile implies --seccomp */
             break;
 
+        /* -------- watchdog & verdict -------- */
+        case OPT_GRACE_MS:
+            grace_ms = (unsigned)strtoul(optarg, NULL, 10);
+            break;
+
+        case OPT_EXPECTED_FILE:
+            expected_file = optarg;
+            break;
+
+        case OPT_STRICT_WS:
+            strict_ws = 1;
+            break;
+
         case 'h':
             usage(argv[0]);
             for (size_t i = 0; i < bind_count; i++) free((void *)bind_hosts[i]);
@@ -546,11 +560,22 @@ int main(int argc, char **argv)
         }
     }
 
+    /* ---------------- expected output (for verdict) ------- */
+
+    if (expected_file) {
+        expected_buf = read_file(expected_file, &expected_len);
+        if (!expected_buf) {
+            free(input_buf);
+            for (size_t i = 0; i < bind_count; i++) free((void *)bind_hosts[i]);
+            return 1;
+        }
+    }
+
     /* ---------------- Build sandbox_config_t --------------- */
 
     /*
      * We pass argv[0] as the binary path. Passing additional arguments
-     * to the child is a future enhancement (Step 7+ will add `--`).
+     * to the child is a future enhancement (Step 8+ will add `--`).
      */
     char *child_argv[] = { (char *)binary, NULL };
 
@@ -562,6 +587,7 @@ int main(int argc, char **argv)
         .stdin_len      = input_len,
         .output_limit   = output_limit,
         .timeout_ms     = timeout_ms,
+        .grace_ms       = grace_ms,
 
         /* rlimits */
         .cpu_seconds    = cpu_seconds,
@@ -605,16 +631,32 @@ int main(int argc, char **argv)
         fprintf(stderr, "sandbox_run failed: rc=%d (%s)\n",
                 rc, strerror(errno));
         free(input_buf);
+        free(expected_buf);
         for (size_t i = 0; i < bind_count; i++) free((void *)bind_hosts[i]);
         return 1;
     }
 
+    /* ---------------- Verdict determination --------------- */
+
+    char verdict_str[16];
+    verdict_input_t vin = {
+        .expected          = expected_buf,
+        .expected_len      = expected_len,
+        .strict_whitespace = strict_ws,
+    };
+    verdict_code_t vcode = verdict_determine(&res, &vin,
+                                             verdict_str, sizeof(verdict_str));
+    (void)vcode;
+
     /* ---------------- Report ------------------------------ */
 
     printf("=== SANDBOX RESULT ===\n");
-    printf("verdict:            %s\n", describe_result(&res));
+    printf("verdict:            %s\n", verdict_str);
     printf("exit_code:          %d\n", res.exit_code);
     printf("signal:             %d\n", res.signal);
+    printf("timed_out:          %d\n", res.timed_out);
+    printf("term_sent:          %d\n", res.term_sent);
+    printf("kill_sent:          %d\n", res.kill_sent);
     printf("ns_setup_failed:    %d\n", res.ns_setup_failed);
     printf("seccomp_violation:  %d\n", res.seccomp_violation);
     printf("oom_killed:         %d\n", res.oom_killed);
@@ -645,21 +687,11 @@ int main(int argc, char **argv)
 
     /* ---------------- Cleanup ----------------------------- */
 
-    /*
-     * "Success" means the child exited 0, was not killed by a signal,
-     * was not OOM-killed by cgroups, and did not fail namespace setup.
-     * A seccomp violation is not "success" — but it's also a policy
-     * decision that a caller might want to inspect. We report success
-     * based on the observable outcome: clean exit.
-     */
-    int ok = (res.exit_code == 0
-              && res.signal == 0
-              && !res.oom_killed
-              && !res.ns_setup_failed
-              && !res.seccomp_violation);
+    int ok = (vcode == VERDICT_OK);
 
     sandbox_result_free(&res);
     free(input_buf);
+    free(expected_buf);
     for (size_t i = 0; i < bind_count; i++) free((void *)bind_hosts[i]);
 
     return ok ? 0 : 1;

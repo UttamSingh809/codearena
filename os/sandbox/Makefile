@@ -18,7 +18,9 @@ LIB_SRCS = \
     $(SRCDIR)/pipe_reader.c \
     $(SRCDIR)/cgroup.c \
     $(SRCDIR)/namespace.c \
-    $(SRCDIR)/seccomp_filter.c
+    $(SRCDIR)/seccomp_filter.c \
+    $(SRCDIR)/watchdog.c \
+    $(SRCDIR)/verdict.c
 LIB_OBJS = $(LIB_SRCS:.c=.o)
 
 TEST_BINS = \
