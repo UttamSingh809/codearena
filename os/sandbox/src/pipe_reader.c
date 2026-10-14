@@ -7,7 +7,6 @@
  * (but the pipe is still drained so the child never blocks on write).
  */
 
-#define _GNU_SOURCE
 #include "sandbox.h"
 
 #include <errno.h>
