@@ -43,13 +43,6 @@ struct queue {
 /* Utilities                                                          */
 /* ------------------------------------------------------------------ */
 
-static uint64_t now_ns(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
-}
-
 /* Build semaphore name "<base>_mtx" etc. Caller provides buffer. */
 static void make_sem_name(char *dst, size_t dstsz,
                           const char *base, const char *suffix)
