@@ -13,6 +13,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -57,6 +58,9 @@ int watchdog_wait(pid_t child, unsigned int timeout_ms,
 
     long start_ms = now_ms();
     long deadline_ms = (timeout_ms > 0) ? start_ms + (long)timeout_ms : 0;
+
+    fprintf(stderr, "watchdog: start=%ld timeout=%u deadline=%ld\n",
+            start_ms, timeout_ms, deadline_ms);
 
     int status = 0;
     struct rusage ru;

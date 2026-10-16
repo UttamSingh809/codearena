@@ -37,6 +37,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -199,6 +200,28 @@ void sandbox_result_free(sandbox_result_t *r)
 }
 
 /* ------------------------------------------------------------------ */
+/* Watchdog thread for step 7                                         */
+/* ------------------------------------------------------------------ */
+
+typedef struct
+{
+    pid_t child;
+    unsigned int timeout_ms;
+    unsigned int grace_ms;
+    watchdog_result_t result;
+    struct rusage ru;
+    int rc;
+} watchdog_thread_args_t;
+
+static void *watchdog_thread_main(void *arg)
+{
+    watchdog_thread_args_t *a = (watchdog_thread_args_t *)arg;
+    a->rc = watchdog_wait(a->child, a->timeout_ms, a->grace_ms,
+                          &a->result, &a->ru);
+    return NULL;
+}
+
+/* ------------------------------------------------------------------ */
 /* sandbox_run                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -320,6 +343,36 @@ int sandbox_run(const sandbox_config_t *cfg, sandbox_result_t *res)
         };
         ns_setup(&nsc);
 
+        /* Attach ourselves to the cgroup. Doing this AFTER ns_setup
+         * ensures that if ns_setup forked (for PID namespace), the
+         * process that actually runs the user program is the one
+         * that gets attached. Otherwise the grandchild would run
+         * outside the cgroup. */
+        if (cfg->cgroup_root && cfg->cgroup_name &&
+            *cfg->cgroup_root && *cfg->cgroup_name)
+        {
+            char procs_path[512];
+            int n = snprintf(procs_path, sizeof(procs_path),
+                             "%s/%s/cgroup.procs",
+                             cfg->cgroup_root, cfg->cgroup_name);
+            if (n > 0 && (size_t)n < sizeof(procs_path))
+            {
+                int fd = open(procs_path, O_WRONLY | O_CLOEXEC);
+                if (fd >= 0)
+                {
+                    char pid_buf[32];
+                    int plen = snprintf(pid_buf, sizeof(pid_buf),
+                                        "%d\n", (int)getpid());
+                    if (plen > 0)
+                    {
+                        ssize_t w = write(fd, pid_buf, (size_t)plen);
+                        (void)w;
+                    }
+                    close(fd);
+                }
+            }
+        }
+
         /* ----------------------------------------------------------
          * STEP 6 — seccomp-BPF.
          *
@@ -385,11 +438,11 @@ int sandbox_run(const sandbox_config_t *cfg, sandbox_result_t *res)
      * because the window is sub-millisecond and rlimits still bound
      * the child.
      * -------------------------------------------------------------- */
-    if (cgroup_active) {
-        if (cgroup_attach_pid(cfg->cgroup_root, cfg->cgroup_name, child) < 0) {
-            /* Non-fatal — rlimits remain in place. */
-        }
-    }
+    // if (cgroup_active) {
+    //     if (cgroup_attach_pid(cfg->cgroup_root, cfg->cgroup_name, child) < 0) {
+    //         /* Non-fatal — rlimits remain in place. */
+    //     }
+    // }
 
     /* --------------------------------------------------------------
      * STEP 2d — feed stdin and close the write end so the child
@@ -430,12 +483,35 @@ int sandbox_run(const sandbox_config_t *cfg, sandbox_result_t *res)
     res->stderr_buf[0] = '\0';
 
     /* --------------------------------------------------------------
-     * STEP 2f — capture stdout and stderr in parallel.
+     * STEP 2f + 7a — output capture and watchdog, run concurrently.
      *
-     * poll() on both pipe read ends prevents the classic deadlock
-     * where a child blocked writing to stderr is never read because
-     * the parent is blocked reading stdout (or vice versa).
+     * The watchdog runs in a separate thread so it can enforce the
+     * wall-clock deadline while the main thread blocks reading
+     * output pipes. Without this, a program that produces no output
+     * and never exits would block the capture forever and the
+     * watchdog would never fire.
+     *
+     * poll() on both pipe read ends also prevents the classic
+     * deadlock where a child blocked writing to stderr is never
+     * read because the parent is blocked reading stdout.
      * -------------------------------------------------------------- */
+    watchdog_thread_args_t wd_args = {
+        .child = child,
+        .timeout_ms = cfg->timeout_ms,
+        .grace_ms = cfg->grace_ms ? cfg->grace_ms : 500,
+        .rc = -1,
+    };
+    memset(&wd_args.result, 0, sizeof(wd_args.result));
+    memset(&wd_args.ru, 0, sizeof(wd_args.ru));
+
+    pthread_t wd_tid;
+    int wd_started = 0;
+    if (pthread_create(&wd_tid, NULL, watchdog_thread_main, &wd_args) == 0)
+    {
+        wd_started = 1;
+    }
+
+    /* Capture stdout and stderr. Blocks until both pipes see EOF. */
     int rc = sandbox_capture_output(out_pipe[0], err_pipe[0], cfg->output_limit,
                                     res->stdout_buf, &res->stdout_len,
                                     &res->stdout_truncated,
@@ -444,59 +520,46 @@ int sandbox_run(const sandbox_config_t *cfg, sandbox_result_t *res)
     close_if_valid(out_pipe[0]);
     close_if_valid(err_pipe[0]);
 
-    /* --------------------------------------------------------------
-     * STEP 7a — wall-clock watchdog.
-     *
-     * watchdog_wait() polls wait4(WNOHANG) in a loop until the child
-     * exits or the deadline fires. On deadline, it sends SIGTERM
-     * first, waits grace_ms, then escalates to SIGKILL. It returns
-     * the child's exit status and (optionally) its rusage.
-     * -------------------------------------------------------------- */
-    watchdog_result_t wd;
-    struct rusage ru;
-    memset(&ru, 0, sizeof(ru));
-    unsigned int grace = cfg->grace_ms ? cfg->grace_ms : 500;
+    /* Wait for the watchdog thread to reap the child. */
+    if (wd_started)
+    {
+        pthread_join(wd_tid, NULL);
+    }
 
-    int wd_rc = watchdog_wait(child, cfg->timeout_ms, grace, &wd, &ru);
+    res->wall_time_ms = now_ms() - start_ms;
+    res->timed_out = wd_args.result.timed_out;
+    res->term_sent = wd_args.result.term_sent;
+    res->kill_sent = wd_args.result.kill_sent;
+    res->timed_out_elapsed_ms = wd_args.result.timed_out_elapsed_ms;
 
-    res->wall_time_ms         = now_ms() - start_ms;
-    res->timed_out            = wd.timed_out;
-    res->term_sent            = wd.term_sent;
-    res->kill_sent            = wd.kill_sent;
-    res->timed_out_elapsed_ms = wd.timed_out_elapsed_ms;
-
-    if (wd_rc < 0) {
+    if (wd_args.rc < 0)
+    {
         sandbox_result_free(res);
-        if (cgroup_active) cgroup_destroy(cfg->cgroup_root, cfg->cgroup_name);
+        if (cgroup_active)
+            cgroup_destroy(cfg->cgroup_root, cfg->cgroup_name);
         return SANDBOX_ERR_WATCHDOG;
     }
 
-    /* --------------------------------------------------------------
-     * STEP 2g — decode the exit status.
-     *
-     * WIFEXITED   → normal termination; exit_code is the low 8 bits.
-     * WIFSIGNALED → killed by signal; signal is the signal number,
-     *               exit_code is -1 (sentinel).
-     * -------------------------------------------------------------- */
-    int status = wd.exit_status;
-    if (WIFEXITED(status)) {
+    /* Decode exit status. */
+    int status = wd_args.result.exit_status;
+    struct rusage ru = wd_args.ru;
+
+    if (WIFEXITED(status))
+    {
         res->exit_code = WEXITSTATUS(status);
-        res->signal    = 0;
-    } else if (WIFSIGNALED(status)) {
+        res->signal = 0;
+    }
+    else if (WIFSIGNALED(status))
+    {
         res->exit_code = -1;
-        res->signal    = WTERMSIG(status);
+        res->signal = WTERMSIG(status);
     }
 
-    /* --------------------------------------------------------------
-     * STEP 3b — copy rusage fields into the result.
-     *
-     * wait4()'s rusage is per-child, unlike getrusage(RUSAGE_CHILDREN)
-     * which accumulates across all reaped children of the worker.
-     * -------------------------------------------------------------- */
+    /* Copy rusage fields into the result. */
     res->user_time_ms = ru.ru_utime.tv_sec * 1000L + ru.ru_utime.tv_usec / 1000L;
-    res->sys_time_ms  = ru.ru_stime.tv_sec * 1000L + ru.ru_stime.tv_usec / 1000L;
-    res->cpu_time_ms  = res->user_time_ms + res->sys_time_ms;
-    res->max_rss_kb   = ru.ru_maxrss;    /* KB on Linux */
+    res->sys_time_ms = ru.ru_stime.tv_sec * 1000L + ru.ru_stime.tv_usec / 1000L;
+    res->cpu_time_ms = res->user_time_ms + res->sys_time_ms;
+    res->max_rss_kb = ru.ru_maxrss;
 
     /* --------------------------------------------------------------
      * STEP 4c — read cgroup stats BEFORE destroying the cgroup.

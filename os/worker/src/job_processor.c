@@ -267,11 +267,14 @@ static void run_one_test(worker_t *w, const char *binary_path,
      * path becomes argv[1]. For C/C++, the binary is the executable.
      */
     char *child_argv[4];
-    if (strcmp(language, "python") == 0) {
+    if (strcmp(language, "python") == 0)
+    {
         child_argv[0] = (char *)"/usr/bin/python3";
         child_argv[1] = (char *)binary_path;
         child_argv[2] = NULL;
-    } else {
+    }
+    else
+    {
         child_argv[0] = (char *)binary_path;
         child_argv[1] = NULL;
     }
@@ -281,69 +284,115 @@ static void run_one_test(worker_t *w, const char *binary_path,
     snprintf(cgroup_name, sizeof(cgroup_name), "%s_sub_%ld_%d",
              w->cfg.worker_id, (long)time(NULL), (int)getpid());
 
-    sandbox_config_t scfg = {
-        .binary       = child_argv[0],
-        .argv         = child_argv,
-        .stdin_data   = tc->input,
-        .stdin_len    = strlen(tc->input),
-        .output_limit = (size_t)w->cfg.output_limit_kb * 1024,
-        .timeout_ms   = time_limit_ms + 500,   /* grace above problem limit */
-        .grace_ms     = 500,
+    /*
+     * Namespace policy for the per-test-case sandbox.
+     *
+     * Copy the worker's namespace preferences, then apply the same
+     * auto-upgrade/auto-disable logic the sandbox CLI uses:
+     *
+     *   - Running as root: force enable_user_ns = 0. Root already has
+     *     all capabilities, and writing uid_map from a root process
+     *     fails with EPERM (the kernel refuses to map uids the process
+     *     doesn't own in the parent namespace).
+     *
+     *   - Non-root with mount or pid namespaces requested: force
+     *     enable_user_ns = 1. Without it, unshare(CLONE_NEWNS) and
+     *     unshare(CLONE_NEWPID) fail with EPERM.
+     */
+    int ns_user = w->cfg.enable_user_ns;
+    int ns_mnt = w->cfg.enable_mount_ns;
+    int ns_pid = w->cfg.enable_pid_ns;
 
-        .cpu_seconds    = (time_limit_ms / 1000) + 2,
-        .max_file_size  = 16 * 1024 * 1024,
-        .max_pids       = 64,
-        .stack_size     = 8 * 1024 * 1024,
+    if (geteuid() == 0)
+    {
+        ns_user = 0;
+    }
+    else if ((ns_mnt || ns_pid) && !ns_user)
+    {
+        ns_user = 1;
+    }
+
+    sandbox_config_t scfg = {
+        .binary = child_argv[0],
+        .argv = child_argv,
+        .stdin_data = tc->input,
+        .stdin_len = strlen(tc->input),
+        .output_limit = (size_t)w->cfg.output_limit_kb * 1024,
+        .timeout_ms = time_limit_ms + 500,
+        .grace_ms = 500,
+
+        .cpu_seconds = (time_limit_ms / 1000) + 2,
+        .max_file_size = 16 * 1024 * 1024,
+        .max_pids = 64,
+        .stack_size = 8 * 1024 * 1024,
         .max_open_files = 64,
 
-        .cgroup_root       = w->cfg.cgroup_root,
-        .cgroup_name       = cgroup_name,
-        .cgroup_cpu_pct    = 100,
-        .cgroup_memory_mb  = memory_limit_mb,
-        .cgroup_pids_max   = 64,
-        .cgroup_io_read_bps  = 0,
+        .cgroup_root = w->cfg.cgroup_root,
+        .cgroup_name = cgroup_name,
+        .cgroup_cpu_pct = 100,
+        .cgroup_memory_mb = memory_limit_mb,
+        .cgroup_pids_max = 64,
+        .cgroup_io_read_bps = 0,
         .cgroup_io_write_bps = 0,
 
-        .enable_pid_ns    = w->cfg.enable_pid_ns,
-        .enable_mount_ns  = w->cfg.enable_mount_ns,
-        .enable_net_ns    = w->cfg.enable_net_ns,
-        .enable_user_ns   = w->cfg.enable_user_ns,
-        .enable_uts_ns    = w->cfg.enable_uts_ns,
-        .enable_ipc_ns    = w->cfg.enable_ipc_ns,
-        .rootfs           = w->cfg.rootfs,
-        .hostname         = "codearena",
-        .bind_host_paths  = NULL,
+        .enable_pid_ns = ns_pid,
+        .enable_mount_ns = ns_mnt,
+        .enable_net_ns = w->cfg.enable_net_ns,
+        .enable_user_ns = ns_user,
+        .enable_uts_ns = w->cfg.enable_uts_ns,
+        .enable_ipc_ns = w->cfg.enable_ipc_ns,
+        .rootfs = w->cfg.rootfs,
+        .hostname = "codearena",
+        .bind_host_paths = NULL,
         .bind_guest_paths = NULL,
-        .bind_count       = 0,
+        .bind_count = 0,
 
-        .enable_seccomp  = w->cfg.enable_seccomp,
+        .enable_seccomp = w->cfg.enable_seccomp,
         .seccomp_profile = w->cfg.seccomp_profile,
     };
 
     sandbox_result_t res;
     int rc = sandbox_run(&scfg, &res);
-    if (rc != SANDBOX_OK) {
+    if (rc != SANDBOX_OK)
+    {
+        /* Diagnostic: log the sandbox's failure so we can debug. */
+        fprintf(stderr,
+                "run_one_test: sandbox_run rc=%d "
+                "ns_failed=%d sec_viol=%d oom=%d timed_out=%d\n",
+                rc, res.ns_setup_failed, res.seccomp_violation,
+                res.oom_killed, res.timed_out);
+        fprintf(stderr, "  stderr: %s\n",
+                res.stderr_buf ? res.stderr_buf : "(null)");
+        fprintf(stderr, "  binary: %s\n", scfg.binary);
+        fprintf(stderr, "  cgroup: %s/%s\n",
+                scfg.cgroup_root ? scfg.cgroup_root : "(null)",
+                scfg.cgroup_name ? scfg.cgroup_name : "(null)");
+        fflush(stderr);
+
         snprintf(out_verdict, out_verdict_sz, "FAILED");
-        *out_stdout = NULL;
-        *out_stderr = strdup("sandbox_run failed");
+        *out_stdout = strdup("");
+        *out_stderr = strdup(res.stderr_buf ? res.stderr_buf
+                                            : "sandbox_run failed");
+        *out_runtime_ms = 0;
+        *out_memory_kb = 0;
+        sandbox_result_free(&res);
         return;
     }
 
     verdict_input_t vin = {
-        .expected          = tc->expected,
-        .expected_len      = strlen(tc->expected),
+        .expected = tc->expected,
+        .expected_len = strlen(tc->expected),
         .strict_whitespace = 0,
     };
     verdict_determine(&res, &vin, out_verdict, out_verdict_sz);
 
-    *out_stdout     = strdup(res.stdout_buf ? res.stdout_buf : "");
-    *out_stderr     = strdup(res.stderr_buf ? res.stderr_buf : "");
+    *out_stdout = strdup(res.stdout_buf ? res.stdout_buf : "");
+    *out_stderr = strdup(res.stderr_buf ? res.stderr_buf : "");
     *out_runtime_ms = (int)res.wall_time_ms;
-    *out_memory_kb  = (int)(res.cgroup_memory_peak_bytes / 1024);
+    *out_memory_kb = (int)(res.cgroup_memory_peak_bytes / 1024);
 
     sandbox_result_free(&res);
 }
-
 /* ------------------------------------------------------------------ */
 /* Main entry point                                                   */
 /* ------------------------------------------------------------------ */
@@ -364,12 +413,25 @@ int job_process(worker_t *w, uint64_t submission_id,
     }
 
     /* Create a per-job temp directory. */
+    const char *tmp_root = w->cfg.sandbox_tmp ? w->cfg.sandbox_tmp : "/tmp/codearena";
+
+    /* Ensure the temp root exists. mkdir() doesn't create parents,
+     * and /tmp is often cleared on boot, so the root may be missing. */
+    if (mkdir(tmp_root, 0755) < 0 && errno != EEXIST)
+    {
+        fprintf(stderr, "worker: cannot create temp root %s: %s\n",
+                tmp_root, strerror(errno));
+        test_case_set_free(&ts);
+        return -1;
+    }
+
     char tmpdir[256];
     snprintf(tmpdir, sizeof(tmpdir), "%s/sub_%llu_%d",
-             w->cfg.sandbox_tmp ? w->cfg.sandbox_tmp : "/tmp/codearena",
+             tmp_root,
              (unsigned long long)submission_id, (int)getpid());
 
-    if (mkdir(tmpdir, 0755) < 0 && errno != EEXIST) {
+    if (mkdir(tmpdir, 0755) < 0 && errno != EEXIST)
+    {
         fprintf(stderr, "worker: mkdir %s failed: %s\n", tmpdir, strerror(errno));
         test_case_set_free(&ts);
         return -1;
@@ -449,7 +511,18 @@ int job_process(worker_t *w, uint64_t submission_id,
             first_failure_stderr = err;
             out = err = NULL;   /* transfer ownership */
         }
-
+        /* Short-circuit on terminal verdicts. TLE, MLE, RE, and CE
+         * indicate the submission cannot pass any subsequent test
+         * case in a meaningful way. Skipping them saves time and
+         * prevents the total run from exceeding the worker's lease. */
+        if (strcmp(this_verdict, "TLE") == 0 ||
+            strcmp(this_verdict, "MLE") == 0 ||
+            strcmp(this_verdict, "RE") == 0 ||
+            strcmp(this_verdict, "CE") == 0)
+        {
+            break;
+        }
+        
         if (rt > max_runtime) max_runtime = rt;
         if (mem > max_memory) max_memory = mem;
 

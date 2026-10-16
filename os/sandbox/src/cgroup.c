@@ -143,6 +143,38 @@ static int write_memory_max(const char *root, const char *name, unsigned int mb)
     return write_file(path, buf);
 }
 
+static int write_memory_swap_max(const char *root, const char *name, unsigned int mb)
+{
+    char path[PATH_MAX_LOCAL];
+    if (build_path(path, sizeof(path), root, name, "memory.swap.max") < 0)
+        return -1;
+
+    char buf[32];
+    /* If mb == 0, write "0" (disable swap). Otherwise, write the byte value. */
+    int n;
+    if (mb == 0)
+    {
+        n = snprintf(buf, sizeof(buf), "0\n");
+    }
+    else
+    {
+        n = snprintf(buf, sizeof(buf), "%llu\n",
+                     (unsigned long long)mb * 1024ULL * 1024ULL);
+    }
+    if (n <= 0)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+
+    /* Non-fatal: some kernels may not have swap accounting. */
+    if (write_file(path, buf) < 0)
+    {
+        return 0;
+    }
+    return 0;
+}
+
 static int write_pids_max(const char *root, const char *name, unsigned int max)
 {
     if (max == 0) return 0;
@@ -212,6 +244,17 @@ int cgroup_create(const char *root, const char *name, const cgroup_config_t *cfg
     if (write_memory_max(root, name, cfg->memory_limit_mb) < 0) {
         rmdir(path);
         return -1;
+    }
+    if (write_memory_max(root, name, cfg->memory_limit_mb) < 0)
+    {
+        rmdir(path);
+        return -1;
+    }
+    /* Disable swap for this cgroup. Without this, a process can exceed
+     * memory.max by swapping, and the OOM killer never fires. */
+    if (write_memory_swap_max(root, name, 0) < 0)
+    {
+        /* Non-fatal */
     }
     if (write_pids_max(root, name, cfg->pids_max) < 0) {
         rmdir(path);

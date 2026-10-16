@@ -6,7 +6,7 @@ CC       ?= gcc
 CPPFLAGS += -Iinclude
 CFLAGS   ?= -Wall -Wextra -Wpedantic -O2 -g -std=c11 -D_GNU_SOURCE
 LDFLAGS  ?=
-LDLIBS   ?= -lseccomp
+LDLIBS 	 ?= -lseccomp -lpthread
 
 SRCDIR  = src
 INCDIR  = include

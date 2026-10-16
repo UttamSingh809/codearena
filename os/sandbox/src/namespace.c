@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -260,6 +261,10 @@ int ns_setup(const ns_config_t *cfg)
             _exit(0);
         }
         /* We are the grandchild — PID 1 in the new namespace. */
+        /* Grandchild: set PR_SET_PDEATHSIG so if the intermediate parent
+         * dies (e.g., from the watchdog's SIGKILL), the grandchild is
+         * killed too. This prevents orphaned sandboxes. */
+        prctl(PR_SET_PDEATHSIG, SIGKILL);
     }
 
     /* ---------------- Mount namespace ---------------------- */

@@ -146,41 +146,75 @@ verdict_code_t verdict_determine(const sandbox_result_t *r,
         goto done;
     }
 
-    /* 1. Sandbox setup failure — highest priority, indicates a bug
-     *    in the harness rather than in the submission. */
-    if (r->ns_setup_failed) { v = VERDICT_FAILED; goto done; }
-
-    /* 2. Seccomp violation — the submission tried a blocked syscall.
-     *    From the judge's perspective this is a runtime error. */
-    if (r->seccomp_violation) { v = VERDICT_RE; goto done; }
-
-    /* 3. cgroup OOM — the kernel killed the process because it tried
-     *    to exceed memory.max. */
-    if (r->oom_killed) { v = VERDICT_MLE; goto done; }
-
-    /* 4. CPU time exhausted (RLIMIT_CPU) — SIGXCPU. */
-    if (r->signal == SIGXCPU) { v = VERDICT_TLE; goto done; }
-
-    /* 5. Wall-clock deadline hit (watchdog). */
-    if (r->timed_out) { v = VERDICT_TLE; goto done; }
-
-    /* 6. File size limit hit (RLIMIT_FSIZE) — SIGXFSZ. */
-    if (r->signal == SIGXFSZ) { v = VERDICT_OLE; goto done; }
-
-    /* 7. Output stream cap hit — the sandbox stopped reading. */
-    if (r->stdout_truncated || r->stderr_truncated) {
-        v = VERDICT_OLE; goto done;
+    /* 1. Sandbox setup failure. */
+    if (r->ns_setup_failed)
+    {
+        v = VERDICT_FAILED;
+        goto done;
     }
 
-    /* 8. Any other signal — the process died abnormally. */
-    if (r->signal != 0) { v = VERDICT_RE; goto done; }
+    /* 2. Seccomp violation — the submission tried a blocked syscall. */
+    if (r->seccomp_violation)
+    {
+        v = VERDICT_RE;
+        goto done;
+    }
 
-    /* 9. Non-zero exit code — runtime error. */
-    if (r->exit_code != 0) { v = VERDICT_RE; goto done; }
+    /* 3. cgroup OOM — kernel killed the process. */
+    if (r->oom_killed)
+    {
+        v = VERDICT_MLE;
+        goto done;
+    }
 
-    /* 10. Compare output. If we weren't given expected output, treat
-     *     as "no check" and default to AC after clean exit. */
-    if (in && in->expected) {
+    /* 4. Wall-clock watchdog fired — TLE. Must come before signal
+     *    checks because the watchdog sends SIGTERM/SIGKILL, and we
+     *    don't want those to be interpreted as generic runtime errors. */
+    if (r->timed_out)
+    {
+        v = VERDICT_TLE;
+        goto done;
+    }
+
+    /* 5. CPU time exhausted (RLIMIT_CPU) — SIGXCPU. */
+    if (r->signal == SIGXCPU)
+    {
+        v = VERDICT_TLE;
+        goto done;
+    }
+
+    /* 6. File size limit hit (RLIMIT_FSIZE) — SIGXFSZ. */
+    if (r->signal == SIGXFSZ)
+    {
+        v = VERDICT_OLE;
+        goto done;
+    }
+
+    /* 7. Output stream cap hit. */
+    if (r->stdout_truncated || r->stderr_truncated)
+    {
+        v = VERDICT_OLE;
+        goto done;
+    }
+
+    /* 8. Any other signal. */
+    if (r->signal != 0)
+    {
+        v = VERDICT_RE;
+        goto done;
+    }
+
+    /* 9. Non-zero exit code. */
+    if (r->exit_code != 0)
+    {
+        v = VERDICT_RE;
+        goto done;
+    }
+
+        /* 10. Compare output. If we weren't given expected output, treat
+         *     as "no check" and default to AC after clean exit. */
+        if (in && in->expected)
+    {
         if (!verdict_output_match(r->stdout_buf, r->stdout_len,
                                   in->expected, in->expected_len,
                                   in->strict_whitespace)) {

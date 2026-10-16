@@ -36,6 +36,12 @@ static void handle_signal(int sig)
 {
     (void)sig;
     g_stop_requested = 1;
+    /* Force exit: sem_wait() in queue_dequeue blocks indefinitely
+     * even after a signal handler returns, because glibc's sem_wait
+     * retries on EINTR. _exit() is async-signal-safe and terminates
+     * the process immediately. The kernel reclaims all resources
+     * (fds, mmaps, cgroup membership) on exit. */
+    _exit(0);
 }
 
 static void install_signal_handlers(void)
