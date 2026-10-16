@@ -280,13 +280,13 @@ sequenceDiagram
 
     P->>E: sem_wait(empty)
     P->>M: sem_wait(mtx)
-    P->>R: Write ring[tail]; advance tail; count++
+    P->>R: Write ring[tail], advance tail, increment count
     P->>M: sem_post(mtx)
     P->>F: sem_post(full)
 
     C->>F: sem_wait(full)
     C->>M: sem_wait(mtx)
-    C->>R: Read ring[head]; advance head; count--
+    C->>R: Read ring[head], advance head, decrement count
     C->>M: sem_post(mtx)
     C->>E: sem_post(empty)
 ```
