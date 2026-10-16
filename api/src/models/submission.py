@@ -40,6 +40,12 @@ class ResultDetail(BaseModel):
     stdout: Optional[str] = None
     stderr: Optional[str] = None
     graded_at: Optional[datetime] = None
+    graded_by: Optional[str] = None
+
+    # Test case accounting (new)
+    test_total: Optional[int] = None
+    test_passed: Optional[int] = None
+    first_failed: Optional[int] = None
 
 
 class SubmissionDetail(BaseModel):
@@ -53,6 +59,11 @@ class SubmissionDetail(BaseModel):
     processing_started_at: Optional[datetime] = None
     retry_count: int
     result: Optional[ResultDetail] = None
+    test_total: Optional[int] = None
+    test_passed: Optional[int] = None
+    test_current: Optional[int] = None
+    username: Optional[str] = None
+    problem_title: Optional[str] = None
 
 
 class SubmissionSummary(BaseModel):

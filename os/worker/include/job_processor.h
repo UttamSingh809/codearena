@@ -19,6 +19,9 @@ typedef struct {
     int     memory_kb;         /* max memory across test cases */
     char   *stdout_capture;    /* heap; first failure's stdout, or NULL */
     char   *stderr_capture;    /* heap; first failure's stderr, or NULL */
+    int test_total;            /* total test cases considered */
+    int test_passed;           /* number that passed (verdict=AC) */
+    int first_failed;          /* ordinal of first failure, or 0 if none */
 } grading_result_t;
 
 /*

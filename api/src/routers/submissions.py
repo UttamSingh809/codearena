@@ -98,10 +98,18 @@ async def get_submission(
             s.id, s.user_id, s.problem_id, s.language, s.source_code,
             s.status, s.submitted_at, s.processing_started_at,
             s.retry_count,
+            s.test_total, s.test_passed, s.test_current,
+            u.username,
+            p.title AS problem_title,
             r.verdict, r.score, r.runtime_ms, r.memory_kb,
-            r.stdout, r.stderr, r.graded_at
+            r.stdout, r.stderr, r.graded_at, r.graded_by,
+            r.test_total    AS r_test_total,
+            r.test_passed   AS r_test_passed,
+            r.first_failed  AS r_first_failed
         FROM submissions s
         LEFT JOIN results r ON r.submission_id = s.id
+        LEFT JOIN users u ON u.id = s.user_id
+        LEFT JOIN problems p ON p.id = s.problem_id
         WHERE s.id = $1
         """,
         submission_id,
@@ -123,6 +131,10 @@ async def get_submission(
             stdout=row["stdout"],
             stderr=row["stderr"],
             graded_at=row["graded_at"],
+            graded_by=row["graded_by"],
+            test_total=row["r_test_total"],
+            test_passed=row["r_test_passed"],
+            first_failed=row["r_first_failed"],
         )
 
     return SubmissionDetail(
@@ -135,6 +147,11 @@ async def get_submission(
         submitted_at=row["submitted_at"],
         processing_started_at=row["processing_started_at"],
         retry_count=row["retry_count"],
+        username=row["username"],
+        problem_title=row["problem_title"],
+        test_total=row["test_total"],
+        test_passed=row["test_passed"],
+        test_current=row["test_current"],
         result=result,
     )
 

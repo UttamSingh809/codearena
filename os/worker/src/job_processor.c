@@ -488,33 +488,72 @@ int job_process(worker_t *w, uint64_t submission_id,
     char *first_failure_stdout = NULL;
     char *first_failure_stderr = NULL;
 
-    for (int i = 0; i < ts.count; i++) {
+    g->test_total = ts.count;
+    g->test_passed = 0;
+    g->first_failed = 0;
+
+    for (int i = 0; i < ts.count; i++)
+    {
         char this_verdict[16];
         char *out = NULL, *err = NULL;
         int rt = 0, mem = 0;
 
+        /* Update live progress in the DB before running the case. */
+        char progress_buf[32];
+        snprintf(progress_buf, sizeof(progress_buf), "%d", i + 1);
+        const char *progress_params[2] = {progress_buf, NULL};
+        char sid_buf[32];
+        snprintf(sid_buf, sizeof(sid_buf), "%llu",
+                 (unsigned long long)submission_id);
+        progress_params[1] = sid_buf;
+
+        db_result_t *pr = db_exec(w->db,
+                                  "UPDATE submissions SET test_current = $1, "
+                                  "test_total = $3, test_passed = $4 WHERE id = $2",
+                                  4, (const char *const[]){progress_buf, sid_buf, ({ static char b[16];
+                                          snprintf(b, sizeof(b), "%d", ts.count); b; }), ({ static char b[16];
+                                          snprintf(b, sizeof(b), "%d", g->test_passed); b; })});
+        if (pr)
+            db_result_free(pr);
+
         run_one_test(w, bin_path, language, &ts.cases[i],
-                     2000, 256,   /* TODO: fetch limits from problems table */
+                     2000, 256,
                      this_verdict, sizeof(this_verdict),
                      &out, &err, &rt, &mem);
 
         total_points += ts.cases[i].points;
         int prio = verdict_priority(this_verdict);
-        if (prio > worst_priority) {
+        if (prio > worst_priority)
+        {
             worst_priority = prio;
-            snprintf(worst_verdict, sizeof(worst_verdict), "%s", this_verdict);
+            strncpy(worst_verdict, this_verdict, sizeof(worst_verdict) - 1);
         }
-        if (strcmp(this_verdict, "AC") == 0) {
+
+        if (strcmp(this_verdict, "AC") == 0)
+        {
             earned_points += ts.cases[i].points;
-        } else if (!first_failure_stdout) {
-            first_failure_stdout = out;
-            first_failure_stderr = err;
-            out = err = NULL;   /* transfer ownership */
+            g->test_passed++;
         }
-        /* Short-circuit on terminal verdicts. TLE, MLE, RE, and CE
-         * indicate the submission cannot pass any subsequent test
-         * case in a meaningful way. Skipping them saves time and
-         * prevents the total run from exceeding the worker's lease. */
+        else
+        {
+            if (!first_failure_stdout)
+            {
+                first_failure_stdout = out;
+                first_failure_stderr = err;
+                out = err = NULL;
+                g->first_failed = ts.cases[i].ordinal;
+            }
+        }
+
+        if (rt > max_runtime)
+            max_runtime = rt;
+        if (mem > max_memory)
+            max_memory = mem;
+
+        free(out);
+        free(err);
+
+        /* Short-circuit on terminal verdicts. */
         if (strcmp(this_verdict, "TLE") == 0 ||
             strcmp(this_verdict, "MLE") == 0 ||
             strcmp(this_verdict, "RE") == 0 ||
@@ -522,12 +561,6 @@ int job_process(worker_t *w, uint64_t submission_id,
         {
             break;
         }
-        
-        if (rt > max_runtime) max_runtime = rt;
-        if (mem > max_memory) max_memory = mem;
-
-        free(out);
-        free(err);
     }
 
     /* Aggregate. */

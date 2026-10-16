@@ -238,25 +238,43 @@ static int commit_result(worker_t *w, uint64_t submission_id,
     db_result_free(lr);
 
     /* Step 2: insert result */
-    char score[16], runtime[16], memory[16];
-    snprintf(score,   sizeof(score),   "%d", g->score);
-    snprintf(runtime, sizeof(runtime), "%d", g->runtime_ms);
-    snprintf(memory,  sizeof(memory),  "%d", g->memory_kb);
+    char score_buf[16], runtime_buf[16], memory_buf[16];
+    char test_total_buf[16], test_passed_buf[16], first_failed_buf[16];
+
+    snprintf(score_buf, sizeof(score_buf), "%d", g->score);
+    snprintf(runtime_buf, sizeof(runtime_buf), "%d", g->runtime_ms);
+    snprintf(memory_buf, sizeof(memory_buf), "%d", g->memory_kb);
+    snprintf(test_total_buf, sizeof(test_total_buf), "%d", g->test_total);
+    snprintf(test_passed_buf, sizeof(test_passed_buf), "%d", g->test_passed);
+    snprintf(first_failed_buf, sizeof(first_failed_buf), "%d", g->first_failed);
 
     const char *ins_sql =
         "INSERT INTO results "
         "  (submission_id, verdict, score, runtime_ms, memory_kb, "
-        "   stdout, stderr, graded_by) "
-        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) "
+        "   stdout, stderr, graded_by, "
+        "   test_total, test_passed, first_failed) "
+        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) "
         "ON CONFLICT (submission_id) DO NOTHING";
 
-    const char *ins_params[8] = {
-        sid, g->verdict, score, runtime, memory,
-        g->stdout_capture, g->stderr_capture, w->cfg.worker_id
+    const char *ins_params[11] = {
+        sid,
+        g->verdict,
+        score_buf,
+        runtime_buf,
+        memory_buf,
+        g->stdout_capture ? g->stdout_capture : "",
+        g->stderr_capture ? g->stderr_capture : "",
+        w->cfg.worker_id,
+        test_total_buf,
+        test_passed_buf,
+        first_failed_buf,
     };
 
-    db_result_t *ir = db_exec(w->db, ins_sql, 8, ins_params);
-    if (!ir) {
+    db_result_t *ir = db_exec(w->db, ins_sql, 11, ins_params);
+    if (!ir)
+    {
+        fprintf(stderr, "worker[%s]: result insert failed: %s\n",
+                w->cfg.worker_id, db_client_last_error(w->db));
         db_rollback(w->db);
         return -1;
     }
@@ -265,7 +283,8 @@ static int commit_result(worker_t *w, uint64_t submission_id,
     /* Step 3: mark completed */
     const char *upd_sql =
         "UPDATE submissions SET status = 'COMPLETED', "
-        "  processing_started_at = NULL, worker_id = NULL "
+        "  processing_started_at = NULL, worker_id = NULL, "
+        "  test_current = NULL "
         "WHERE id = $1";
     db_result_t *ur = db_exec(w->db, upd_sql, 1, lock_params);
     if (!ur) {
