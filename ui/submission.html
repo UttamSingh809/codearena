@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Submission</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<main>
+    <div id="msg"></div>
+    <h2>Submission <span id="sub-id"></span></h2>
+    <div id="submission-view" class="muted">Loading…</div>
+</main>
+
+<script src="static/app.js"></script>
+<script>
+    'use strict';
+
+    (function () {
+        if (!requireAuth('history')) return;
+
+        const params = new URLSearchParams(location.search);
+        const subId = parseInt(params.get('id') || '0', 10);
+
+        const msg = document.getElementById('msg');
+        const view = document.getElementById('submission-view');
+        const subIdEl = document.getElementById('sub-id');
+
+        document.getElementById('sub-id').textContent = subId ? `#${subId}` : '';
+
+        function render(s) {
+            view.innerHTML = '';
+            view.classList.remove('muted');
+
+            const r = s.result;
+
+            view.appendChild(el('div', { class: 'card' }, [
+                el('div', {}, [
+                    el('strong', { text: 'Status: ' }),
+                    verdictBadge(r ? r.verdict : s.status),
+                ]),
+                el('div', {}, [
+                    el('strong', { text: 'Language: ' }),
+                    el('span', { text: s.language }),
+                ]),
+                el('div', {}, [
+                    el('strong', { text: 'Submitted: ' }),
+                    el('span', { text: formatDate(s.submitted_at) }),
+                ]),
+                s.processing_started_at && el('div', {}, [
+                    el('strong', { text: 'Started: ' }),
+                    el('span', { text: formatDate(s.processing_started_at) }),
+                ]),
+                s.retry_count > 0 && el('div', {}, [
+                    el('strong', { text: 'Retries: ' }),
+                    el('span', { text: String(s.retry_count) }),
+                ]),
+            ]));
+
+            if (r) {
+                const details = el('div', { class: 'card' }, [
+                    el('h3', { text: 'Result' }),
+                    el('div', {}, [
+                        el('strong', { text: 'Verdict: ' }),
+                        verdictBadge(r.verdict),
+                    ]),
+                    el('div', {}, [
+                        el('strong', { text: 'Score: ' }),
+                        el('span', { text: String(r.score) }),
+                    ]),
+                    r.runtime_ms != null && el('div', {}, [
+                        el('strong', { text: 'Runtime: ' }),
+                        el('span', { text: `${r.runtime_ms} ms` }),
+                    ]),
+                    r.memory_kb != null && el('div', {}, [
+                        el('strong', { text: 'Memory: ' }),
+                        el('span', { text: `${r.memory_kb} KB` }),
+                    ]),
+                    el('div', {}, [
+                        el('strong', { text: 'Graded: ' }),
+                        el('span', { text: formatDate(r.graded_at) }),
+                    ]),
+                ]);
+
+                if (r.stderr) {
+                    details.appendChild(el('h3', { text: 'Stderr' }));
+                    details.appendChild(el('pre', { text: r.stderr }));
+                }
+                if (r.stdout) {
+                    details.appendChild(el('h3', { text: 'Stdout' }));
+                    details.appendChild(el('pre', { text: r.stdout }));
+                }
+                view.appendChild(details);
+            }
+
+            view.appendChild(el('h3', { text: 'Source code' }));
+            view.appendChild(el('pre', { text: s.source_code }));
+        }
+
+        if (!subId) {
+            showError(msg, 'No submission ID in URL');
+        } else {
+            let stop = null;
+            const stopFn = poll(`/api/submissions/${subId}`, s => {
+                render(s);
+                if (s.status === 'COMPLETED' || s.status === 'FAILED' || s.status === 'CANCELLED') {
+                    return true;
+                }
+                return false;
+            }, 2000);
+            stop = stopFn;
+            window.addEventListener('beforeunload', () => stop && stop());
+        }
+    })();
+</script>
+</body>
+</html>

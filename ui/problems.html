@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Problems</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <main>
+        <div id="msg"></div>
+        <h2>Problems</h2>
+        <div id="problems-list" class="muted">Loading…</div>
+    </main>
+
+    <script src="static/app.js"></script>
+<script>
+    'use strict';
+
+    (function () {
+        if (!requireAuth('problems')) return;
+
+        const list = document.getElementById('problems-list');
+        const msg = document.getElementById('msg');
+
+        (async () => {
+            try {
+                const problems = await Api.listProblems();
+                if (!problems.length) {
+                    list.textContent = 'No problems available.';
+                    return;
+                }
+
+                const table = el('table');
+                const thead = el('thead', {}, [
+                    el('tr', {}, [
+                        el('th', { text: 'ID' }),
+                        el('th', { text: 'Title' }),
+                        el('th', { text: 'Difficulty' }),
+                        el('th', { text: 'Time limit' }),
+                        el('th', { text: 'Memory limit' }),
+                    ]),
+                ]);
+                const tbody = el('tbody');
+                for (const p of problems) {
+                    tbody.appendChild(el('tr', {}, [
+                        el('td', { text: String(p.id) }),
+                        el('td', {}, [
+                            el('a', { href: `problem.html?id=${p.id}`, text: p.title }),
+                        ]),
+                        el('td', { text: p.difficulty }),
+                        el('td', { text: `${p.time_limit_ms} ms` }),
+                        el('td', { text: `${p.memory_limit_mb} MB` }),
+                    ]));
+                }
+                table.appendChild(thead);
+                table.appendChild(tbody);
+
+                list.innerHTML = '';
+                list.classList.remove('muted');
+                list.appendChild(table);
+            } catch (err) {
+                showError(msg, err.message || 'Failed to load problems');
+            }
+        })();
+    })();
+</script>
+</body>
+
+</html>

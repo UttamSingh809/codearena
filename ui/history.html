@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — My Submissions</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+<main>
+    <div id="msg"></div>
+    <h2>My Submissions</h2>
+    <div id="history-view" class="muted">Loading…</div>
+</main>
+
+<script src="static/app.js"></script>
+<script>
+    'use strict';
+
+    (function () {
+        if (!requireAuth('history')) return;
+
+        const view = document.getElementById('history-view');
+        const msg = document.getElementById('msg');
+
+        (async () => {
+            try {
+                const resp = await Api.listSubmissions(50, 0);
+                const items = resp.items;
+
+                if (!items.length) {
+                    view.textContent = 'You have no submissions yet.';
+                    return;
+                }
+
+                const table = el('table');
+                const thead = el('thead', {}, [
+                    el('tr', {}, [
+                        el('th', { text: 'ID' }),
+                        el('th', { text: 'Problem' }),
+                        el('th', { text: 'Language' }),
+                        el('th', { text: 'Status' }),
+                        el('th', { text: 'Score' }),
+                        el('th', { text: 'Runtime' }),
+                        el('th', { text: 'Submitted' }),
+                    ]),
+                ]);
+                const tbody = el('tbody');
+                for (const s of items) {
+                    tbody.appendChild(el('tr', {}, [
+                        el('td', {}, [
+                            el('a', {
+                                href: `submission.html?id=${s.id}`,
+                                text: `#${s.id}`,
+                            }),
+                        ]),
+                        el('td', { text: s.problem_title || `Problem ${s.problem_id}` }),
+                        el('td', { text: s.language }),
+                        el('td', {}, [verdictBadge(s.verdict || s.status)]),
+                        el('td', { text: s.score != null ? String(s.score) : '—' }),
+                        el('td', { text: s.runtime_ms != null ? `${s.runtime_ms} ms` : '—' }),
+                        el('td', { text: formatDate(s.submitted_at) }),
+                    ]));
+                }
+                table.appendChild(thead);
+                table.appendChild(tbody);
+
+                view.innerHTML = '';
+                view.classList.remove('muted');
+                view.appendChild(el('p', { class: 'muted', text: `Total: ${resp.total} submission(s)` }));
+                view.appendChild(table);
+            } catch (err) {
+                showError(msg, err.message || 'Failed to load history');
+            }
+        })();
+    })();
+</script>
+</body>
+</html>

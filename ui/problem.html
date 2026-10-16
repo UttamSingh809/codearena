@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Problem</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <main>
+        <div id="msg"></div>
+        <div id="problem-view"></div>
+
+        <h3>Submit a solution</h3>
+        <form id="submit-form" class="wide">
+            <label>
+                Language
+                <select name="language">
+                    <option value="c">C</option>
+                    <option value="cpp">C++</option>
+                    <option value="python">Python</option>
+                    <option value="java">Java (not yet supported)</option>
+                    <option value="go">Go (not yet supported)</option>
+                    <option value="rust">Rust (not yet supported)</option>
+                </select>
+            </label>
+            <label>
+                Source code
+                <textarea name="source_code" required placeholder="Paste your solution here…"
+                    spellcheck="false"></textarea>
+            </label>
+            <button type="submit">Submit</button>
+        </form>
+
+        <p class="muted" id="submitted-info"></p>
+    </main>
+
+    <script src="static/app.js"></script>
+<script>
+    'use strict';
+
+    (function () {
+        if (!requireAuth('problems')) return;
+
+        const params = new URLSearchParams(location.search);
+        const problemId = parseInt(params.get('id') || '0', 10);
+
+        const msg = document.getElementById('msg');
+        const view = document.getElementById('problem-view');
+        const form = document.getElementById('submit-form');
+        const info = document.getElementById('submitted-info');
+
+        (async () => {
+            if (!problemId) {
+                showError(msg, 'No problem ID in URL');
+                return;
+            }
+            try {
+                const p = await Api.getProblem(problemId);
+                view.appendChild(el('h2', { text: p.title }));
+                view.appendChild(el('div', { class: 'card' }, [
+                    el('div', {}, [el('strong', { text: 'Difficulty: ' }), el('span', { text: p.difficulty })]),
+                    el('div', {}, [el('strong', { text: 'Time limit: ' }), el('span', { text: `${p.time_limit_ms} ms` })]),
+                    el('div', {}, [el('strong', { text: 'Memory limit: ' }), el('span', { text: `${p.memory_limit_mb} MB` })]),
+                    p.description && el('p', { text: p.description }),
+                    p.input_format && el('p', {}, [el('strong', { text: 'Input: ' }), el('span', { text: p.input_format })]),
+                    p.output_format && el('p', {}, [el('strong', { text: 'Output: ' }), el('span', { text: p.output_format })]),
+                    p.constraints && el('p', {}, [el('strong', { text: 'Constraints: ' }), el('span', { text: p.constraints })]),
+                ]));
+            } catch (err) {
+                showError(msg, err.message || 'Failed to load problem');
+            }
+        })();
+
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            clearError(msg);
+            const btn = form.querySelector('button');
+            btn.disabled = true;
+            btn.textContent = 'Submitting…';
+            try {
+                const language = form.language.value;
+                const sourceCode = form.source_code.value;
+                if (!sourceCode.trim()) throw new Error('Source code is empty');
+                const resp = await Api.submit(problemId, language, sourceCode);
+                info.innerHTML = '';
+                info.appendChild(el('span', {
+                    text: `Submission #${resp.id} created. Status: ${resp.status}. `,
+                }));
+                info.appendChild(el('a', {
+                    href: `submission.html?id=${resp.id}`,
+                    text: 'View status →',
+                }));
+                form.reset();
+            } catch (err) {
+                showError(msg, err.message || 'Submit failed');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Submit';
+            }
+        });
+    })();
+</script>
+</body>
+
+</html>

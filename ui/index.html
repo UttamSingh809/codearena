@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Login</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <header>
+        <h1>CodeArena</h1>
+    </header>
+
+    <main>
+        <div id="msg"></div>
+
+        <div id="login-view">
+            <h2>Sign in</h2>
+            <form id="login-form">
+                <label>
+                    Email
+                    <input type="email" name="email" required autocomplete="email">
+                </label>
+                <label>
+                    Password
+                    <input type="password" name="password" required autocomplete="current-password">
+                </label>
+                <button type="submit">Sign in</button>
+            </form>
+            <p class="muted" style="margin-top: 16px;">
+                No account?
+                <a href="#" id="show-register">Register</a>
+            </p>
+        </div>
+
+        <div id="register-view" class="hidden">
+            <h2>Create account</h2>
+            <form id="register-form">
+                <label>
+                    Username (3–32 chars: letters, digits, underscore)
+                    <input type="text" name="username" required minlength="3" maxlength="32">
+                </label>
+                <label>
+                    Email
+                    <input type="email" name="email" required autocomplete="email">
+                </label>
+                <label>
+                    Password (8–72 chars, at least one letter and one digit)
+                    <input type="password" name="password" required minlength="8" maxlength="72"
+                        autocomplete="new-password">
+                </label>
+                <button type="submit">Create account</button>
+            </form>
+            <p class="muted" style="margin-top: 16px;">
+                Already have an account?
+                <a href="#" id="show-login">Sign in</a>
+            </p>
+        </div>
+    </main>
+
+    <script src="static/app.js"></script>
+    <script>
+'use strict';
+
+// If already logged in, go to problems
+if (Auth.isLoggedIn()) {
+    location.href = 'problems.html';
+}
+
+const msg = document.getElementById('msg');
+const loginView = document.getElementById('login-view');
+const registerView = document.getElementById('register-view');
+
+function showLogin() {
+    loginView.classList.remove('hidden');
+    registerView.classList.add('hidden');
+    clearError(msg);
+}
+function showRegister() {
+    registerView.classList.remove('hidden');
+    loginView.classList.add('hidden');
+    clearError(msg);
+}
+
+document.getElementById('show-register').addEventListener('click', e => {
+    e.preventDefault();
+    showRegister();
+});
+document.getElementById('show-login').addEventListener('click', e => {
+    e.preventDefault();
+    showLogin();
+});
+
+document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    clearError(msg);
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    try {
+        const email = form.email.value.trim();
+        const password = form.password.value;
+        const resp = await Api.login(email, password);
+        Auth.saveToken(resp.access_token, resp.user);
+        location.href = 'problems.html';
+    } catch (err) {
+        showError(msg, err.message || 'Login failed');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+    }
+});
+
+document.getElementById('register-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    clearError(msg);
+    const form = e.target;
+    const btn = form.querySelector('button');
+    btn.disabled = true;
+    btn.textContent = 'Creating…';
+    try {
+        const username = form.username.value.trim();
+        const email = form.email.value.trim();
+        const password = form.password.value;
+        const resp = await Api.register(username, email, password);
+        Auth.saveToken(resp.access_token, resp.user);
+        location.href = 'problems.html';
+    } catch (err) {
+        showError(msg, err.message || 'Registration failed');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create account';
+    }
+});
+    </script>
+</body>
+
+</html>

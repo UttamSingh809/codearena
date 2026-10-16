@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Leaderboard</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <main>
+        <div id="msg"></div>
+        <h2>Leaderboard</h2>
+        <div id="leaderboard-view" class="muted">Loading…</div>
+    </main>
+
+    <script src="static/app.js"></script>
+<script>
+    'use strict';
+
+    (function () {
+        if (!requireAuth('leaderboard')) return;
+
+        const view = document.getElementById('leaderboard-view');
+        const msg = document.getElementById('msg');
+
+        (async () => {
+            try {
+                const rows = await Api.leaderboard(50, 0);
+
+                if (!rows.length) {
+                    view.textContent = 'No submissions yet. Be the first!';
+                    return;
+                }
+
+                const table = el('table');
+                const thead = el('thead', {}, [
+                    el('tr', {}, [
+                        el('th', { text: 'Rank' }),
+                        el('th', { text: 'User' }),
+                        el('th', { text: 'Score' }),
+                        el('th', { text: 'Solved' }),
+                        el('th', { text: 'Submissions' }),
+                    ]),
+                ]);
+                const tbody = el('tbody');
+                for (const r of rows) {
+                    tbody.appendChild(el('tr', {}, [
+                        el('td', { text: String(r.rank) }),
+                        el('td', { text: r.username }),
+                        el('td', { text: String(r.total_score) }),
+                        el('td', { text: String(r.total_solved) }),
+                        el('td', { text: String(r.total_submissions) }),
+                    ]));
+                }
+                table.appendChild(thead);
+                table.appendChild(tbody);
+
+                view.innerHTML = '';
+                view.classList.remove('muted');
+                view.appendChild(table);
+            } catch (err) {
+                showError(msg, err.message || 'Failed to load leaderboard');
+            }
+        })();
+    })();
+</script>
+</body>
+
+</html>
