@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Dashboard</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <main>
+        <div class="flex gap-16" style="align-items:center;justify-content:space-between;margin-bottom:32px;">
+            <div>
+                <h1 id="greeting">Welcome back</h1>
+                <p class="muted" id="subtitle">Loading your stats…</p>
+            </div>
+            <a href="problems.html" class="btn">Browse Problems</a>
+        </div>
+
+        <div class="card-grid mb-24" id="stats-grid">
+            <!-- populated by JS -->
+        </div>
+
+        <div class="card mb-24">
+            <div class="card-header">
+                <h3>Recent Submissions</h3>
+                <a href="history.html" class="muted" style="font-size:12px;">View all →</a>
+            </div>
+            <div id="recent-table">
+                <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="static/app.js"></script>
+    <script>
+'use strict';
+
+(function () {
+    if (!requireAuth('dashboard')) return;
+
+    const user = Auth.getUser();
+    document.getElementById('greeting').textContent = `Welcome back, ${user.username}`;
+
+    (async () => {
+        try {
+            const subs = await Api.listSubmissions(10, 0);
+            const items = subs.items;
+
+            // Stats
+            const totalSubs = subs.total;
+            const acCount = items.filter(s => s.verdict === 'AC').length;
+            const accepted = items.filter(s => s.verdict === 'AC');
+            const totalScore = accepted.reduce((sum, s) => sum + (s.score || 0), 0);
+            const bestRuntime = accepted.length
+                ? Math.min(...accepted.map(s => s.runtime_ms || Infinity))
+                : null;
+
+            document.getElementById('subtitle').textContent =
+                `Member since ${formatDate(user.created_at || new Date())}`;
+
+            const statsGrid = document.getElementById('stats-grid');
+            clear(statsGrid);
+            statsGrid.appendChild(statCard('Total Submissions', totalSubs, 'across all problems'));
+            statsGrid.appendChild(statCard('Accepted', acCount, 'in recent 10'));
+            statsGrid.appendChild(statCard('Score', totalScore, 'earned so far'));
+            statsGrid.appendChild(statCard('Best Runtime',
+                bestRuntime ? `${bestRuntime} ms` : '—',
+                'fastest AC'));
+
+            // Recent table
+            const container = document.getElementById('recent-table');
+            if (!items.length) {
+                emptyState(container, 'No submissions yet',
+                    'Head over to Problems and submit your first solution.');
+                return;
+            }
+
+            const table = el('table');
+            table.appendChild(el('thead', {}, [
+                el('tr', {}, [
+                    el('th', { text: 'Problem' }),
+                    el('th', { text: 'Language' }),
+                    el('th', { text: 'Verdict' }),
+                    el('th', { class: 'num', text: 'Runtime' }),
+                    el('th', { class: 'num', text: 'Memory' }),
+                    el('th', { text: 'Submitted' }),
+                ]),
+            ]));
+            const tbody = el('tbody');
+            for (const s of items) {
+                tbody.appendChild(el('tr', {}, [
+                    el('td', {}, [
+                        el('a', {
+                            href: `submission.html?id=${s.id}`,
+                            text: s.problem_title || `Problem ${s.problem_id}`,
+                        }),
+                    ]),
+                    el('td', { text: s.language }),
+                    el('td', {}, [verdictBadge(s.verdict || s.status)]),
+                    el('td', { class: 'num', text: s.runtime_ms != null ? `${s.runtime_ms} ms` : '—' }),
+                    el('td', { class: 'num', text: s.memory_kb != null ? `${formatNumber(s.memory_kb)} KB` : '—' }),
+                    el('td', { class: 'muted', text: formatDate(s.submitted_at) }),
+                ]));
+            }
+            table.appendChild(tbody);
+            clear(container);
+            container.appendChild(table);
+        } catch (err) {
+            toast(err.message || 'Failed to load dashboard', 'error');
+        }
+    })();
+
+    function statCard(label, value, sub) {
+        return el('div', { class: 'stat' }, [
+            el('div', { class: 'stat-label', text: label }),
+            el('div', { class: 'stat-value', text: String(value) }),
+            sub && el('div', { class: 'stat-sub', text: sub }),
+        ]);
+    }
+})();
+    </script>
+</body>
+
+</html>

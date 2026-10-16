@@ -10,62 +10,72 @@
 
 <body>
     <main>
-        <div id="msg"></div>
-        <h2>Leaderboard</h2>
-        <div id="leaderboard-view" class="muted">Loading…</div>
+        <h1>Leaderboard</h1>
+        <p class="muted mb-24">Global ranking across all problems.</p>
+
+        <div id="leaderboard-view">
+            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
+        </div>
     </main>
 
     <script src="static/app.js"></script>
-<script>
-    'use strict';
+    <script>
+        'use strict';
 
-    (function () {
-        if (!requireAuth('leaderboard')) return;
+        (function () {
+            if (!requireAuth('leaderboard')) return;
 
-        const view = document.getElementById('leaderboard-view');
-        const msg = document.getElementById('msg');
+            const container = document.getElementById('leaderboard-view');
 
-        (async () => {
-            try {
-                const rows = await Api.leaderboard(50, 0);
+            (async () => {
+                try {
+                    const rows = await Api.leaderboard(100, 0);
 
-                if (!rows.length) {
-                    view.textContent = 'No submissions yet. Be the first!';
-                    return;
-                }
+                    if (!rows.length) {
+                        emptyState(container, 'No rankings yet',
+                            'Be the first to submit a solution!');
+                        return;
+                    }
 
-                const table = el('table');
-                const thead = el('thead', {}, [
-                    el('tr', {}, [
-                        el('th', { text: 'Rank' }),
-                        el('th', { text: 'User' }),
-                        el('th', { text: 'Score' }),
-                        el('th', { text: 'Solved' }),
-                        el('th', { text: 'Submissions' }),
-                    ]),
-                ]);
-                const tbody = el('tbody');
-                for (const r of rows) {
-                    tbody.appendChild(el('tr', {}, [
-                        el('td', { text: String(r.rank) }),
-                        el('td', { text: r.username }),
-                        el('td', { text: String(r.total_score) }),
-                        el('td', { text: String(r.total_solved) }),
-                        el('td', { text: String(r.total_submissions) }),
+                    const table = el('table');
+                    table.appendChild(el('thead', {}, [
+                        el('tr', {}, [
+                            el('th', { text: 'Rank' }),
+                            el('th', { text: 'User' }),
+                            el('th', { class: 'num', text: 'Score' }),
+                            el('th', { class: 'num', text: 'Solved' }),
+                            el('th', { class: 'num', text: 'Submissions' }),
+                        ]),
                     ]));
-                }
-                table.appendChild(thead);
-                table.appendChild(tbody);
+                    const tbody = el('tbody');
+                    for (const r of rows) {
+                        const rank = r.rank;
+                        let medalClass = 'plain';
+                        if (rank === 1) medalClass = 'gold';
+                        else if (rank === 2) medalClass = 'silver';
+                        else if (rank === 3) medalClass = 'bronze';
 
-                view.innerHTML = '';
-                view.classList.remove('muted');
-                view.appendChild(table);
-            } catch (err) {
-                showError(msg, err.message || 'Failed to load leaderboard');
-            }
+                        tbody.appendChild(el('tr', {}, [
+                            el('td', {}, [
+                                el('span', { class: `rank-medal ${medalClass}`, text: String(rank) }),
+                            ]),
+                            el('td', { text: r.username }),
+                            el('td', { class: 'num', text: String(r.total_score) }),
+                            el('td', { class: 'num', text: String(r.total_solved) }),
+                            el('td', { class: 'num', text: String(r.total_submissions) }),
+                        ]));
+                    }
+                    table.appendChild(tbody);
+
+                    clear(container);
+                    container.appendChild(el('div', { class: 'table-wrap' }, [table]));
+                } catch (err) {
+                    emptyState(container, 'Failed to load', err.message || 'Unknown error');
+                    toast(err.message || 'Failed to load leaderboard', 'error');
+                }
+            })();
         })();
-    })();
-</script>
+    </script>
 </body>
 
 </html>

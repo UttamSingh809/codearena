@@ -9,100 +9,260 @@
 </head>
 
 <body>
-    <main>
-        <div id="msg"></div>
-        <div id="problem-view"></div>
+    <main class="problem-layout">
+        <!-- ============================================================
+         LEFT PANE — Problem statement (scrolls with the page)
+         ============================================================ -->
+        <section class="problem-statement">
+            <div id="problem-header" class="mb-24">
+                <div class="loading-block">
+                    <span class="spinner"></span><span>Loading problem…</span>
+                </div>
+            </div>
+            <div id="statement"></div>
+        </section>
 
-        <h3>Submit a solution</h3>
-        <form id="submit-form" class="wide">
-            <label>
-                Language
-                <select name="language">
-                    <option value="c">C</option>
-                    <option value="cpp">C++</option>
-                    <option value="python">Python</option>
-                    <option value="java">Java (not yet supported)</option>
-                    <option value="go">Go (not yet supported)</option>
-                    <option value="rust">Rust (not yet supported)</option>
-                </select>
-            </label>
-            <label>
-                Source code
-                <textarea name="source_code" required placeholder="Paste your solution here…"
-                    spellcheck="false"></textarea>
-            </label>
-            <button type="submit">Submit</button>
-        </form>
+        <!-- ============================================================
+         RIGHT PANE — Editor + submit + verdict (sticky)
+         ============================================================ -->
+        <aside class="problem-editor">
+            <div class="editor-inner">
+                <!-- Toolbar -->
+                <div class="editor-toolbar">
+                    <div class="editor-lang">
+                        <label for="language">Language</label>
+                        <select id="language">
+                            <option value="c">C</option>
+                            <option value="cpp">C++</option>
+                            <option value="python">Python</option>
+                        </select>
+                    </div>
+                    <div class="editor-actions">
+                        <button id="clear-btn" class="btn ghost" title="Clear editor">
+                            Clear
+                        </button>
+                        <button id="submit-btn" class="btn">
+                            Submit
+                        </button>
+                    </div>
+                </div>
 
-        <p class="muted" id="submitted-info"></p>
+                <!-- Editor -->
+                <div class="editor-wrap">
+                    <textarea id="source" placeholder="Write your solution here…" spellcheck="false" autocomplete="off"
+                        autocorrect="off" autocapitalize="off"></textarea>
+                    <div class="editor-status">
+                        <span id="char-count" class="muted">0 / 65536</span>
+                        <span id="submit-status" class="muted"></span>
+                    </div>
+                </div>
+
+                <!-- Live result card -->
+                <div id="result-card" class="result-card hidden">
+                    <div class="result-header">
+                        <span class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:0.6px;">
+                            Latest submission
+                        </span>
+                        <a id="view-full" href="#" class="muted" style="font-size:12px;">
+                            View details →
+                        </a>
+                    </div>
+                    <div id="result-body"></div>
+                </div>
+            </div>
+        </aside>
     </main>
 
     <script src="static/app.js"></script>
-<script>
-    'use strict';
+    <script>
+        'use strict';
 
-    (function () {
-        if (!requireAuth('problems')) return;
+        (function () {
+            if (!requireAuth('problems')) return;
 
-        const params = new URLSearchParams(location.search);
-        const problemId = parseInt(params.get('id') || '0', 10);
+            const params = new URLSearchParams(location.search);
+            const problemId = parseInt(params.get('id') || '0', 10);
 
-        const msg = document.getElementById('msg');
-        const view = document.getElementById('problem-view');
-        const form = document.getElementById('submit-form');
-        const info = document.getElementById('submitted-info');
+            const header = document.getElementById('problem-header');
+            const statement = document.getElementById('statement');
+            const source = document.getElementById('source');
+            const language = document.getElementById('language');
+            const submitBtn = document.getElementById('submit-btn');
+            const clearBtn = document.getElementById('clear-btn');
+            const submitStat = document.getElementById('submit-status');
+            const charCount = document.getElementById('char-count');
+            const resultCard = document.getElementById('result-card');
+            const resultBody = document.getElementById('result-body');
+            const viewFull = document.getElementById('view-full');
 
-        (async () => {
             if (!problemId) {
-                showError(msg, 'No problem ID in URL');
+                toast('No problem selected', 'error');
+                location.href = 'problems.html';
                 return;
             }
-            try {
-                const p = await Api.getProblem(problemId);
-                view.appendChild(el('h2', { text: p.title }));
-                view.appendChild(el('div', { class: 'card' }, [
-                    el('div', {}, [el('strong', { text: 'Difficulty: ' }), el('span', { text: p.difficulty })]),
-                    el('div', {}, [el('strong', { text: 'Time limit: ' }), el('span', { text: `${p.time_limit_ms} ms` })]),
-                    el('div', {}, [el('strong', { text: 'Memory limit: ' }), el('span', { text: `${p.memory_limit_mb} MB` })]),
-                    p.description && el('p', { text: p.description }),
-                    p.input_format && el('p', {}, [el('strong', { text: 'Input: ' }), el('span', { text: p.input_format })]),
-                    p.output_format && el('p', {}, [el('strong', { text: 'Output: ' }), el('span', { text: p.output_format })]),
-                    p.constraints && el('p', {}, [el('strong', { text: 'Constraints: ' }), el('span', { text: p.constraints })]),
+
+            // ---- Persistent language + draft ---------------------------------
+
+            const savedLang = localStorage.getItem('codearena_lang');
+            if (savedLang) language.value = savedLang;
+            language.addEventListener('change', () => {
+                localStorage.setItem('codearena_lang', language.value);
+            });
+
+            const draftKey = 'codearena_source_' + problemId;
+            source.value = localStorage.getItem(draftKey) || '';
+            updateCharCount();
+
+            let draftTimer = null;
+            source.addEventListener('input', () => {
+                updateCharCount();
+                // Debounce the localStorage write so we don't hammer it on every keystroke
+                if (draftTimer) clearTimeout(draftTimer);
+                draftTimer = setTimeout(() => {
+                    localStorage.setItem(draftKey, source.value);
+                }, 300);
+            });
+
+            // Tab key inserts 4 spaces instead of moving focus
+            source.addEventListener('keydown', e => {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const start = source.selectionStart;
+                    const end = source.selectionEnd;
+                    source.value = source.value.slice(0, start) + '    ' + source.value.slice(end);
+                    source.selectionStart = source.selectionEnd = start + 4;
+                    updateCharCount();
+                }
+            });
+
+            function updateCharCount() {
+                charCount.textContent = `${source.value.length} / 65536`;
+            }
+
+            clearBtn.addEventListener('click', () => {
+                if (source.value && !confirm('Clear the editor?')) return;
+                source.value = '';
+                localStorage.removeItem(draftKey);
+                updateCharCount();
+            });
+
+            // ---- Load the problem -------------------------------------------
+
+            (async () => {
+                try {
+                    const p = await Api.getProblem(problemId);
+                    document.title = `CodeArena — ${p.title}`;
+
+                    // Header
+                    clear(header);
+                    header.appendChild(el('h1', { text: p.title }));
+                    header.appendChild(el('div', { class: 'problem-meta' }, [
+                        difficultyBadge(p.difficulty),
+                        el('span', { class: 'meta-pill', text: `⏱ ${p.time_limit_ms} ms` }),
+                        el('span', { class: 'meta-pill', text: `🧠 ${p.memory_limit_mb} MB` }),
+                    ]));
+
+                    // Statement sections
+                    clear(statement);
+                    if (p.description) statement.appendChild(renderSection('Description', p.description));
+                    if (p.input_format) statement.appendChild(renderSection('Input', p.input_format));
+                    if (p.output_format) statement.appendChild(renderSection('Output', p.output_format));
+                    if (p.constraints) statement.appendChild(renderSection('Constraints', p.constraints));
+                } catch (err) {
+                    clear(header);
+                    header.appendChild(el('p', { text: err.message || 'Failed to load problem' }));
+                    toast(err.message || 'Failed to load problem', 'error');
+                }
+            })();
+
+            function renderSection(title, body) {
+                return el('section', { class: 'statement-section' }, [
+                    el('h3', { text: title }),
+                    el('div', { class: 'statement-body', text: body }),
+                ]);
+            }
+
+            // ---- Submit ------------------------------------------------------
+
+            submitBtn.addEventListener('click', async () => {
+                if (!source.value.trim()) {
+                    toast('Source code is empty', 'warn');
+                    source.focus();
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Submitting…';
+                submitStat.innerHTML = '';
+                submitStat.appendChild(el('span', { class: 'spinner' }));
+                submitStat.appendChild(document.createTextNode(' Submitting'));
+
+                try {
+                    const r = await Api.submit(problemId, language.value, source.value);
+                    toast(`Submission #${r.id} created`, 'success');
+                    showResult(r.id);
+                } catch (err) {
+                    toast(err.message || 'Submit failed', 'error');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit';
+                    submitStat.textContent = '';
+                }
+            });
+
+            function showResult(subId) {
+                resultCard.classList.remove('hidden');
+                viewFull.href = `submission.html?id=${subId}`;
+
+                // Scroll the result into view on narrow screens
+                if (window.innerWidth < 900) {
+                    resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+
+                const stop = poll(async () => {
+                    const s = await Api.getSubmission(subId);
+                    renderResult(s);
+                    if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(s.status)) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Submit';
+                        submitStat.textContent = '';
+                        if (s.result && s.result.verdict === 'AC') {
+                            toast('Accepted!', 'success');
+                        } else if (s.result) {
+                            toast(`Verdict: ${s.result.verdict}`, 'warn');
+                        }
+                        return true;
+                    }
+                    return false;
+                }, 1500);
+
+                window.addEventListener('beforeunload', () => stop());
+            }
+
+            function renderResult(s) {
+                clear(resultBody);
+                const r = s.result;
+                const verdict = r ? r.verdict : s.status;
+
+                // Compact verdict banner
+                resultBody.appendChild(el('div', { class: `result-verdict ${verdict}` }, [
+                    el('div', { class: 'result-verdict-name', text: verdict }),
+                    r && el('div', { class: 'result-verdict-metrics' }, [
+                        r.runtime_ms != null && el('span', { text: `${r.runtime_ms} ms` }),
+                        r.memory_kb != null && el('span', { text: `${formatNumber(r.memory_kb)} KB` }),
+                        el('span', { text: `score ${r.score}` }),
+                    ].filter(Boolean)),
                 ]));
-            } catch (err) {
-                showError(msg, err.message || 'Failed to load problem');
+
+                // stderr on failure
+                if (r && r.stderr) {
+                    resultBody.appendChild(el('div', { class: 'result-error' }, [
+                        el('div', { class: 'result-error-label', text: 'Error output' }),
+                        el('pre', { class: 'code-block error-output', text: r.stderr }),
+                    ]));
+                }
             }
         })();
-
-        form.addEventListener('submit', async e => {
-            e.preventDefault();
-            clearError(msg);
-            const btn = form.querySelector('button');
-            btn.disabled = true;
-            btn.textContent = 'Submitting…';
-            try {
-                const language = form.language.value;
-                const sourceCode = form.source_code.value;
-                if (!sourceCode.trim()) throw new Error('Source code is empty');
-                const resp = await Api.submit(problemId, language, sourceCode);
-                info.innerHTML = '';
-                info.appendChild(el('span', {
-                    text: `Submission #${resp.id} created. Status: ${resp.status}. `,
-                }));
-                info.appendChild(el('a', {
-                    href: `submission.html?id=${resp.id}`,
-                    text: 'View status →',
-                }));
-                form.reset();
-            } catch (err) {
-                showError(msg, err.message || 'Submit failed');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Submit';
-            }
-        });
-    })();
-</script>
+    </script>
 </body>
 
 </html>

@@ -10,63 +10,98 @@
 
 <body>
     <main>
-        <div id="msg"></div>
-        <h2>Problems</h2>
-        <div id="problems-list" class="muted">Loading…</div>
+        <h1>Problems</h1>
+        <p class="muted mb-24">Solve algorithmic problems, submit your code, and see how you rank.</p>
+
+        <div class="filter-bar">
+            <input type="search" id="search" placeholder="Search problems…">
+            <select id="difficulty-filter">
+                <option value="">All difficulties</option>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+        </div>
+
+        <div id="problems-view">
+            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
+        </div>
     </main>
 
     <script src="static/app.js"></script>
-<script>
-    'use strict';
+    <script>
+        'use strict';
 
-    (function () {
-        if (!requireAuth('problems')) return;
+        (function () {
+            if (!requireAuth('problems')) return;
 
-        const list = document.getElementById('problems-list');
-        const msg = document.getElementById('msg');
+            const container = document.getElementById('problems-view');
+            const search = document.getElementById('search');
+            const diffFilter = document.getElementById('difficulty-filter');
+            let allProblems = [];
 
-        (async () => {
-            try {
-                const problems = await Api.listProblems();
-                if (!problems.length) {
-                    list.textContent = 'No problems available.';
+            function render() {
+                const q = search.value.trim().toLowerCase();
+                const d = diffFilter.value;
+                const filtered = allProblems.filter(p => {
+                    if (d && p.difficulty !== d) return false;
+                    if (q && !p.title.toLowerCase().includes(q)) return false;
+                    return true;
+                });
+
+                if (!filtered.length) {
+                    emptyState(container, 'No problems match',
+                        allProblems.length
+                            ? 'Try adjusting your filters.'
+                            : 'No problems are available yet.');
                     return;
                 }
 
                 const table = el('table');
-                const thead = el('thead', {}, [
+                table.appendChild(el('thead', {}, [
                     el('tr', {}, [
-                        el('th', { text: 'ID' }),
+                        el('th', { text: '#' }),
                         el('th', { text: 'Title' }),
                         el('th', { text: 'Difficulty' }),
-                        el('th', { text: 'Time limit' }),
-                        el('th', { text: 'Memory limit' }),
+                        el('th', { class: 'num', text: 'Time limit' }),
+                        el('th', { class: 'num', text: 'Memory limit' }),
                     ]),
-                ]);
+                ]));
                 const tbody = el('tbody');
-                for (const p of problems) {
+                for (const p of filtered) {
                     tbody.appendChild(el('tr', {}, [
-                        el('td', { text: String(p.id) }),
+                        el('td', { class: 'mono muted', text: String(p.id) }),
                         el('td', {}, [
                             el('a', { href: `problem.html?id=${p.id}`, text: p.title }),
                         ]),
-                        el('td', { text: p.difficulty }),
-                        el('td', { text: `${p.time_limit_ms} ms` }),
-                        el('td', { text: `${p.memory_limit_mb} MB` }),
+                        el('td', {}, [difficultyBadge(p.difficulty)]),
+                        el('td', { class: 'num', text: `${p.time_limit_ms} ms` }),
+                        el('td', { class: 'num', text: `${p.memory_limit_mb} MB` }),
                     ]));
                 }
-                table.appendChild(thead);
                 table.appendChild(tbody);
 
-                list.innerHTML = '';
-                list.classList.remove('muted');
-                list.appendChild(table);
-            } catch (err) {
-                showError(msg, err.message || 'Failed to load problems');
+                clear(container);
+                container.appendChild(el('div', { class: 'table-wrap' }, [table]));
             }
+
+            search.addEventListener('input', render);
+            diffFilter.addEventListener('change', render);
+
+            (async () => {
+                try {
+                    allProblems = await Api.listProblems();
+                    render();
+                } catch (err) {
+                    clear(container);
+                    container.appendChild(el('div', { class: 'card' }, [
+                        el('p', { text: err.message || 'Failed to load problems' }),
+                    ]));
+                    toast(err.message || 'Failed to load problems', 'error');
+                }
+            })();
         })();
-    })();
-</script>
+    </script>
 </body>
 
 </html>

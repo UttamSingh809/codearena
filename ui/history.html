@@ -1,79 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>CodeArena — My Submissions</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
+
 <body>
-<main>
-    <div id="msg"></div>
-    <h2>My Submissions</h2>
-    <div id="history-view" class="muted">Loading…</div>
-</main>
+    <main>
+        <h1>My Submissions</h1>
+        <p class="muted mb-24" id="summary"></p>
 
-<script src="static/app.js"></script>
-<script>
-    'use strict';
+        <div class="filter-bar">
+            <input type="search" id="search" placeholder="Search by problem title…">
+            <select id="verdict-filter">
+                <option value="">All verdicts</option>
+                <option value="AC">Accepted</option>
+                <option value="WA">Wrong Answer</option>
+                <option value="TLE">Time Limit</option>
+                <option value="MLE">Memory Limit</option>
+                <option value="RE">Runtime Error</option>
+                <option value="CE">Compilation Error</option>
+            </select>
+        </div>
 
-    (function () {
-        if (!requireAuth('history')) return;
+        <div id="history-view">
+            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
+        </div>
+    </main>
 
-        const view = document.getElementById('history-view');
-        const msg = document.getElementById('msg');
+    <script src="static/app.js"></script>
+    <script>
+        'use strict';
 
-        (async () => {
-            try {
-                const resp = await Api.listSubmissions(50, 0);
-                const items = resp.items;
+        (function () {
+            if (!requireAuth('history')) return;
 
-                if (!items.length) {
-                    view.textContent = 'You have no submissions yet.';
+            const container = document.getElementById('history-view');
+            const summary = document.getElementById('summary');
+            const search = document.getElementById('search');
+            const verdictFilter = document.getElementById('verdict-filter');
+
+            let allItems = [];
+
+            function render() {
+                const q = search.value.trim().toLowerCase();
+                const v = verdictFilter.value;
+                const filtered = allItems.filter(s => {
+                    const verdict = s.verdict || '';
+                    if (v && verdict !== v) return false;
+                    if (q) {
+                        const title = (s.problem_title || '').toLowerCase();
+                        if (!title.includes(q)) return false;
+                    }
+                    return true;
+                });
+
+                if (!filtered.length) {
+                    emptyState(container, 'No submissions match',
+                        allItems.length ? 'Try adjusting your filters.' : 'Submit your first solution!');
                     return;
                 }
 
                 const table = el('table');
-                const thead = el('thead', {}, [
+                table.appendChild(el('thead', {}, [
                     el('tr', {}, [
                         el('th', { text: 'ID' }),
                         el('th', { text: 'Problem' }),
                         el('th', { text: 'Language' }),
-                        el('th', { text: 'Status' }),
-                        el('th', { text: 'Score' }),
-                        el('th', { text: 'Runtime' }),
+                        el('th', { text: 'Verdict' }),
+                        el('th', { class: 'num', text: 'Score' }),
+                        el('th', { class: 'num', text: 'Runtime' }),
+                        el('th', { class: 'num', text: 'Memory' }),
                         el('th', { text: 'Submitted' }),
                     ]),
-                ]);
+                ]));
                 const tbody = el('tbody');
-                for (const s of items) {
+                for (const s of filtered) {
                     tbody.appendChild(el('tr', {}, [
+                        el('td', { class: 'mono muted', text: `#${s.id}` }),
                         el('td', {}, [
                             el('a', {
                                 href: `submission.html?id=${s.id}`,
-                                text: `#${s.id}`,
+                                text: s.problem_title || `Problem ${s.problem_id}`,
                             }),
                         ]),
-                        el('td', { text: s.problem_title || `Problem ${s.problem_id}` }),
                         el('td', { text: s.language }),
                         el('td', {}, [verdictBadge(s.verdict || s.status)]),
-                        el('td', { text: s.score != null ? String(s.score) : '—' }),
-                        el('td', { text: s.runtime_ms != null ? `${s.runtime_ms} ms` : '—' }),
-                        el('td', { text: formatDate(s.submitted_at) }),
+                        el('td', { class: 'num', text: s.score != null ? String(s.score) : '—' }),
+                        el('td', { class: 'num', text: s.runtime_ms != null ? `${s.runtime_ms} ms` : '—' }),
+                        el('td', { class: 'num', text: s.memory_kb != null ? `${formatNumber(s.memory_kb)} KB` : '—' }),
+                        el('td', { class: 'muted', text: formatDate(s.submitted_at) }),
                     ]));
                 }
-                table.appendChild(thead);
                 table.appendChild(tbody);
 
-                view.innerHTML = '';
-                view.classList.remove('muted');
-                view.appendChild(el('p', { class: 'muted', text: `Total: ${resp.total} submission(s)` }));
-                view.appendChild(table);
-            } catch (err) {
-                showError(msg, err.message || 'Failed to load history');
+                clear(container);
+                container.appendChild(el('div', { class: 'table-wrap' }, [table]));
             }
+
+            search.addEventListener('input', render);
+            verdictFilter.addEventListener('change', render);
+
+            (async () => {
+                try {
+                    const resp = await Api.listSubmissions(100, 0);
+                    allItems = resp.items;
+                    summary.textContent = `You have ${resp.total} submission${resp.total === 1 ? '' : 's'}.`;
+                    render();
+                } catch (err) {
+                    clear(container);
+                    emptyState(container, 'Failed to load', err.message || 'Unknown error');
+                    toast(err.message || 'Failed to load history', 'error');
+                }
+            })();
         })();
-    })();
-</script>
+    </script>
 </body>
+
 </html>

@@ -4,137 +4,131 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>CodeArena — Login</title>
+    <title>CodeArena — Sign in</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
 
 <body>
-    <header>
-        <h1>CodeArena</h1>
-    </header>
+    <div class="auth-screen">
+        <div class="auth-hero">
+            <h1>Code. Compete.<br>Conquer.</h1>
+            <p>
+                CodeArena is a secure, sandboxed platform for solving
+                algorithmic problems. Submit your solution, watch it run
+                in an isolated environment, and climb the leaderboard.
+            </p>
+            <div class="features">
+                <div class="feature">Real-time verdicts for every submission</div>
+                <div class="feature">C, C++, Python supported</div>
+                <div class="feature">Detailed runtime and memory metrics</div>
+                <div class="feature">Global and per-problem rankings</div>
+            </div>
+        </div>
 
-    <main>
-        <div id="msg"></div>
+        <div class="auth-form-panel">
+            <div class="auth-tabs">
+                <button id="tab-login" class="active">Sign in</button>
+                <button id="tab-register">Register</button>
+            </div>
 
-        <div id="login-view">
-            <h2>Sign in</h2>
             <form id="login-form">
-                <label>
-                    Email
-                    <input type="email" name="email" required autocomplete="email">
-                </label>
-                <label>
-                    Password
-                    <input type="password" name="password" required autocomplete="current-password">
-                </label>
-                <button type="submit">Sign in</button>
+                <div class="field">
+                    <label for="login-email">Email</label>
+                    <input id="login-email" type="email" required autocomplete="email">
+                </div>
+                <div class="field">
+                    <label for="login-password">Password</label>
+                    <input id="login-password" type="password" required autocomplete="current-password">
+                </div>
+                <button type="submit" class="btn" style="width:100%;">Sign in</button>
             </form>
-            <p class="muted" style="margin-top: 16px;">
-                No account?
-                <a href="#" id="show-register">Register</a>
-            </p>
-        </div>
 
-        <div id="register-view" class="hidden">
-            <h2>Create account</h2>
-            <form id="register-form">
-                <label>
-                    Username (3–32 chars: letters, digits, underscore)
-                    <input type="text" name="username" required minlength="3" maxlength="32">
-                </label>
-                <label>
-                    Email
-                    <input type="email" name="email" required autocomplete="email">
-                </label>
-                <label>
-                    Password (8–72 chars, at least one letter and one digit)
-                    <input type="password" name="password" required minlength="8" maxlength="72"
+            <form id="register-form" class="hidden">
+                <div class="field">
+                    <label for="reg-username">Username</label>
+                    <input id="reg-username" type="text" required minlength="3" maxlength="32">
+                </div>
+                <div class="field">
+                    <label for="reg-email">Email</label>
+                    <input id="reg-email" type="email" required autocomplete="email">
+                </div>
+                <div class="field">
+                    <label for="reg-password">Password</label>
+                    <input id="reg-password" type="password" required minlength="8" maxlength="72"
                         autocomplete="new-password">
-                </label>
-                <button type="submit">Create account</button>
+                    <span class="muted" style="font-size:11px;">8–72 characters, at least one letter and one
+                        digit</span>
+                </div>
+                <button type="submit" class="btn" style="width:100%;">Create account</button>
             </form>
-            <p class="muted" style="margin-top: 16px;">
-                Already have an account?
-                <a href="#" id="show-login">Sign in</a>
-            </p>
         </div>
-    </main>
+    </div>
 
     <script src="static/app.js"></script>
     <script>
-'use strict';
+        'use strict';
 
-// If already logged in, go to problems
-if (Auth.isLoggedIn()) {
-    location.href = 'problems.html';
-}
+        (function () {
+            if (Auth.isLoggedIn()) { location.href = 'dashboard.html'; return; }
 
-const msg = document.getElementById('msg');
-const loginView = document.getElementById('login-view');
-const registerView = document.getElementById('register-view');
+            const loginTab = document.getElementById('tab-login');
+            const registerTab = document.getElementById('tab-register');
+            const loginForm = document.getElementById('login-form');
+            const registerForm = document.getElementById('register-form');
 
-function showLogin() {
-    loginView.classList.remove('hidden');
-    registerView.classList.add('hidden');
-    clearError(msg);
-}
-function showRegister() {
-    registerView.classList.remove('hidden');
-    loginView.classList.add('hidden');
-    clearError(msg);
-}
+            function showLogin() {
+                loginTab.classList.add('active');
+                registerTab.classList.remove('active');
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+            }
+            function showRegister() {
+                registerTab.classList.add('active');
+                loginTab.classList.remove('active');
+                registerForm.classList.remove('hidden');
+                loginForm.classList.add('hidden');
+            }
 
-document.getElementById('show-register').addEventListener('click', e => {
-    e.preventDefault();
-    showRegister();
-});
-document.getElementById('show-login').addEventListener('click', e => {
-    e.preventDefault();
-    showLogin();
-});
+            loginTab.addEventListener('click', showLogin);
+            registerTab.addEventListener('click', showRegister);
 
-document.getElementById('login-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    clearError(msg);
-    const form = e.target;
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = 'Signing in…';
-    try {
-        const email = form.email.value.trim();
-        const password = form.password.value;
-        const resp = await Api.login(email, password);
-        Auth.saveToken(resp.access_token, resp.user);
-        location.href = 'problems.html';
-    } catch (err) {
-        showError(msg, err.message || 'Login failed');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Sign in';
-    }
-});
+            loginForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                const btn = loginForm.querySelector('button');
+                btn.disabled = true;
+                btn.textContent = 'Signing in…';
+                try {
+                    const email = document.getElementById('login-email').value.trim();
+                    const password = document.getElementById('login-password').value;
+                    const r = await Api.login(email, password);
+                    Auth.saveToken(r.access_token, r.user);
+                    location.href = 'dashboard.html';
+                } catch (err) {
+                    toast(err.message || 'Login failed', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Sign in';
+                }
+            });
 
-document.getElementById('register-form').addEventListener('submit', async e => {
-    e.preventDefault();
-    clearError(msg);
-    const form = e.target;
-    const btn = form.querySelector('button');
-    btn.disabled = true;
-    btn.textContent = 'Creating…';
-    try {
-        const username = form.username.value.trim();
-        const email = form.email.value.trim();
-        const password = form.password.value;
-        const resp = await Api.register(username, email, password);
-        Auth.saveToken(resp.access_token, resp.user);
-        location.href = 'problems.html';
-    } catch (err) {
-        showError(msg, err.message || 'Registration failed');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Create account';
-    }
-});
+            registerForm.addEventListener('submit', async e => {
+                e.preventDefault();
+                const btn = registerForm.querySelector('button');
+                btn.disabled = true;
+                btn.textContent = 'Creating…';
+                try {
+                    const u = document.getElementById('reg-username').value.trim();
+                    const em = document.getElementById('reg-email').value.trim();
+                    const p = document.getElementById('reg-password').value;
+                    const r = await Api.register(u, em, p);
+                    Auth.saveToken(r.access_token, r.user);
+                    location.href = 'dashboard.html';
+                } catch (err) {
+                    toast(err.message || 'Registration failed', 'error');
+                    btn.disabled = false;
+                    btn.textContent = 'Create account';
+                }
+            });
+        })();
     </script>
 </body>
 
