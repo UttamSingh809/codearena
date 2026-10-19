@@ -254,14 +254,249 @@ function poll(fn, intervalMs = 2000) {
 }
 
 // ------------------------------------------------------------------
-// Loading / empty states
+// Skeleton loaders
+// ------------------------------------------------------------------
+//
+// Each function returns a DOM subtree that mimics the shape of the
+// content that's about to load. Callers append it to their container.
+
+const Skeleton = {
+
+    // ---- Base shapes ----
+
+    line(width = 'long') {
+        return el('div', { class: `skeleton skeleton-line ${width}` });
+    },
+
+    title() {
+        return el('div', { class: 'skeleton skeleton-title' });
+    },
+
+    subtitle() {
+        return el('div', { class: 'skeleton skeleton-subtitle' });
+    },
+
+    circle(size = '') {
+        return el('div', { class: `skeleton skeleton-circle ${size}` });
+    },
+
+    badge() {
+        return el('div', { class: 'skeleton skeleton-badge' });
+    },
+
+    cell(width = '') {
+        return el('div', { class: `skeleton skeleton-cell ${width}` });
+    },
+
+    // ---- Composite layouts ----
+
+    /**
+     * A row of stat cards, matching #stats-grid on the dashboard.
+     * @param {number} count - number of cards to show
+     */
+    statGrid(count = 4) {
+        const grid = el('div', { class: 'card-grid' });
+        for (let i = 0; i < count; i++) {
+            grid.appendChild(el('div', { class: 'skeleton-stat' }, [
+                el('div', { class: 'skeleton skeleton-line short' }),
+                el('div', { class: 'skeleton skeleton-title' }),
+                el('div', { class: 'skeleton skeleton-line medium' }),
+            ]));
+        }
+        return grid;
+    },
+
+    /**
+     * A table skeleton with a header row and `rows` body rows.
+     * @param {number} cols - number of columns
+     * @param {number} rows - number of data rows
+     */
+    table(cols = 5, rows = 6) {
+        const wrap = el('div', { class: 'skeleton-table' });
+        wrap.style.setProperty('--cols', cols);
+
+        // Header row
+        const header = el('div', { class: 'skeleton-table-row header' });
+        for (let i = 0; i < cols; i++) {
+            header.appendChild(el('div', { class: 'skeleton skeleton-cell sm' }));
+        }
+        wrap.appendChild(header);
+
+        // Body rows
+        for (let r = 0; r < rows; r++) {
+            const row = el('div', { class: 'skeleton-table-row' });
+            for (let c = 0; c < cols; c++) {
+                // Vary widths so it looks organic
+                const widthClass = ['sm', 'lg', 'md', 'md', 'sm'][c % 5];
+                row.appendChild(el('div', {
+                    class: `skeleton skeleton-cell ${widthClass}`,
+                }));
+            }
+            wrap.appendChild(row);
+        }
+        return wrap;
+    },
+
+    /**
+     * Skeleton for the problem page: header, metadata, statement
+     * sections, and the editor panel.
+     */
+    problemPage() {
+        const wrap = el('div');
+
+        // Header
+        const header = el('div', { class: 'skeleton-problem-header' }, [
+            el('div', { class: 'skeleton skeleton-title', style: { width: '45%', height: '28px' } }),
+            el('div', { class: 'skeleton-problem-meta' }, [
+                el('div', { class: 'skeleton skeleton-badge' }),
+                el('div', { class: 'skeleton skeleton-badge', style: { width: '80px' } }),
+                el('div', { class: 'skeleton skeleton-badge', style: { width: '80px' } }),
+            ]),
+        ]);
+        wrap.appendChild(header);
+
+        // Two-column split: statement + editor skeleton
+        const split = el('div', { class: 'split' });
+
+        // Left: statement sections
+        const left = el('div', { class: 'pane' });
+        for (let i = 0; i < 3; i++) {
+            const section = el('div', { class: 'skeleton-problem-section' }, [
+                el('div', { class: 'skeleton skeleton-line short', style: { height: '10px' } }),
+                el('div', { class: 'skeleton skeleton-line long' }),
+                el('div', { class: 'skeleton skeleton-line long' }),
+                el('div', { class: 'skeleton skeleton-line medium' }),
+            ]);
+            left.appendChild(section);
+        }
+        split.appendChild(left);
+
+        // Right: editor skeleton
+        const right = el('div', { class: 'pane' });
+        const editor = el('div', { class: 'skeleton-editor' }, [
+            el('div', { style: { display: 'flex', gap: '10px', alignItems: 'center' } }, [
+                el('div', { class: 'skeleton skeleton-badge', style: { width: '80px' } }),
+                el('div', { class: 'skeleton skeleton-badge', style: { width: '60px' } }),
+                el('div', { class: 'skeleton skeleton-badge', style: { width: '60px', marginLeft: 'auto' } }),
+            ]),
+            el('div', { class: 'skeleton-editor-body' }),
+        ]);
+        right.appendChild(editor);
+        split.appendChild(right);
+
+        wrap.appendChild(split);
+        return wrap;
+    },
+
+    /**
+     * Skeleton for the submission page: verdict hero + details + code.
+     */
+    submissionPage() {
+        const wrap = el('div');
+
+        // Hero
+        wrap.appendChild(el('div', { class: 'skeleton-verdict-hero' }, [
+            el('div', { class: 'left' }, [
+                el('div', { class: 'skeleton skeleton-line short', style: { height: '10px' } }),
+                el('div', { class: 'skeleton skeleton-title', style: { height: '32px', width: '70%' } }),
+            ]),
+            el('div', { class: 'metrics' }, [
+                el('div', {}, [
+                    el('div', { class: 'skeleton skeleton-line short', style: { height: '10px', width: '50px' } }),
+                    el('div', { class: 'skeleton skeleton-subtitle' }),
+                ]),
+                el('div', {}, [
+                    el('div', { class: 'skeleton skeleton-line short', style: { height: '10px', width: '50px' } }),
+                    el('div', { class: 'skeleton skeleton-subtitle' }),
+                ]),
+                el('div', {}, [
+                    el('div', { class: 'skeleton skeleton-line short', style: { height: '10px', width: '50px' } }),
+                    el('div', { class: 'skeleton skeleton-subtitle' }),
+                ]),
+            ]),
+        ]));
+
+        // Details card
+        const details = el('div', { class: 'card mb-24', style: { padding: '20px' } });
+        for (let i = 0; i < 4; i++) {
+            details.appendChild(el('div', {
+                style: { display: 'flex', gap: '24px', marginBottom: '12px' },
+            }, [
+                el('div', { class: 'skeleton skeleton-line short', style: { height: '12px', width: '120px' } }),
+                el('div', { class: 'skeleton skeleton-line long', style: { height: '12px', flex: 1 } }),
+            ]));
+        }
+        wrap.appendChild(details);
+
+        // Source code card
+        const source = el('div', { class: 'card', style: { padding: '20px' } }, [
+            el('div', { class: 'skeleton skeleton-line short', style: { height: '14px', width: '100px', marginBottom: '16px' } }),
+            el('div', { class: 'skeleton-editor-body', style: { height: '220px' } }),
+        ]);
+        wrap.appendChild(source);
+
+        return wrap;
+    },
+
+    /**
+     * Skeleton for the leaderboard: header + ranked table.
+     */
+    leaderboard() {
+        const wrap = el('div');
+        // Header
+        wrap.appendChild(el('div', { style: { marginBottom: '24px' } }, [
+            el('div', { class: 'skeleton skeleton-title', style: { width: '200px' } }),
+            el('div', { class: 'skeleton skeleton-line medium', style: { height: '12px', marginTop: '8px' } }),
+        ]));
+        // Table
+        wrap.appendChild(this.table(5, 10));
+        return wrap;
+    },
+};
+
+
+// ------------------------------------------------------------------
+// Loading state helpers (updated to use skeletons)
 // ------------------------------------------------------------------
 
-function loadingState(container, msg = 'Loading…') {
+/**
+ * Legacy helper — kept for backwards compatibility. If the caller
+ * specifies a skeleton type, renders it; otherwise falls back to a
+ * simple spinner.
+ *
+ * @param {HTMLElement} container
+ * @param {string} [type] - 'table' | 'stat-grid' | 'problem' |
+ *                          'submission' | 'leaderboard' | undefined
+ * @param {object} [opts] - type-specific options
+ */
+function loadingState(container, type, opts = {}) {
     clear(container);
+
+    if (type === 'table') {
+        container.appendChild(Skeleton.table(opts.cols || 5, opts.rows || 6));
+        return;
+    }
+    if (type === 'stat-grid') {
+        container.appendChild(Skeleton.statGrid(opts.count || 4));
+        return;
+    }
+    if (type === 'problem') {
+        container.appendChild(Skeleton.problemPage());
+        return;
+    }
+    if (type === 'submission') {
+        container.appendChild(Skeleton.submissionPage());
+        return;
+    }
+    if (type === 'leaderboard') {
+        container.appendChild(Skeleton.leaderboard());
+        return;
+    }
+
+    // Fallback: generic spinner block
     container.appendChild(el('div', { class: 'loading-block' }, [
         el('span', { class: 'spinner' }),
-        el('span', { text: msg }),
+        el('span', { text: 'Loading…' }),
     ]));
 }
 

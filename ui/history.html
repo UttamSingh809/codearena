@@ -26,9 +26,7 @@
             </select>
         </div>
 
-        <div id="history-view">
-            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
-        </div>
+        <div id="history-view"></div>
     </main>
 
     <script src="static/app.js"></script>
@@ -103,6 +101,9 @@
 
             search.addEventListener('input', render);
             verdictFilter.addEventListener('change', render);
+
+            // 3. Render Skeleton immediately
+            loadingState(container, 'table', { cols: 8, rows: 8 });
 
             (async () => {
                 try {

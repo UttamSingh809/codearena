@@ -10,17 +10,14 @@
 
 <body>
     <main class="narrow">
-        <div id="submission-view">
-            <div class="loading-block"><span class="spinner lg"></span><span>Loading…</span></div>
-        </div>
+        <div id="submission-view"></div>
     </main>
 
-    <script src="static/app.js"></script>
     <script src="static/app.js"></script>
     <script>
         'use strict';
 
-        (function () {
+        (function() {
             if (!requireAuth('history')) return;
 
             const params = new URLSearchParams(location.search);
@@ -41,17 +38,29 @@
 
                 const r = s.result;
                 const verdict = r ? r.verdict : s.status;
-                const info = VERDICT_INFO[verdict] || { label: verdict };
+                const info = VERDICT_INFO[verdict] || {
+                    label: verdict
+                };
 
                 // ============================================================
                 // Hero: verdict + test case progress + metrics
                 // ============================================================
-                const hero = el('div', { class: 'verdict-hero ' + verdict });
+                const hero = el('div', {
+                    class: 'verdict-hero ' + verdict
+                });
 
                 // Left: verdict name + subline
-                const heroLeft = el('div', { class: 'hero-left' });
-                heroLeft.appendChild(el('div', { class: 'verdict-label', text: 'Verdict' }));
-                heroLeft.appendChild(el('div', { class: 'verdict-name', text: info.label }));
+                const heroLeft = el('div', {
+                    class: 'hero-left'
+                });
+                heroLeft.appendChild(el('div', {
+                    class: 'verdict-label',
+                    text: 'Verdict'
+                }));
+                heroLeft.appendChild(el('div', {
+                    class: 'verdict-name',
+                    text: info.label
+                }));
 
                 // Test cases summary
                 let tcLine = null;
@@ -68,8 +77,8 @@
                 }
 
                 // If WA and we know which case failed
-                if (r && r.first_failed != null && r.first_failed > 0
-                    && r.verdict !== 'AC') {
+                if (r && r.first_failed != null && r.first_failed > 0 &&
+                    r.verdict !== 'AC') {
                     heroLeft.appendChild(el('div', {
                         class: 'verdict-subline muted',
                         text: `First failed at test case #${r.first_failed}`,
@@ -79,7 +88,9 @@
                 hero.appendChild(heroLeft);
 
                 // Right: metrics
-                const metrics = el('div', { class: 'metrics' });
+                const metrics = el('div', {
+                    class: 'metrics'
+                });
                 if (r && r.runtime_ms != null)
                     metrics.appendChild(metric('Runtime', `${r.runtime_ms} ms`));
                 if (r && r.memory_kb != null)
@@ -96,22 +107,53 @@
                 // ============================================================
                 if (s.status === 'PROCESSING' && s.test_current && s.test_total) {
                     const pct = Math.round((s.test_current / s.test_total) * 100);
-                    const live = el('div', { class: 'card mb-24' }, [
-                        el('div', { class: 'flex', style: { justifyContent: 'space-between', marginBottom: '8px' } }, [
-                            el('span', { class: 'muted', text: `Running test ${s.test_current} of ${s.test_total}…` }),
-                            el('span', { class: 'muted', text: `${pct}%` }),
+                    const live = el('div', {
+                        class: 'card mb-24'
+                    }, [
+                        el('div', {
+                            class: 'flex',
+                            style: {
+                                justifyContent: 'space-between',
+                                marginBottom: '8px'
+                            }
+                        }, [
+                            el('span', {
+                                class: 'muted',
+                                text: `Running test ${s.test_current} of ${s.test_total}…`
+                            }),
+                            el('span', {
+                                class: 'muted',
+                                text: `${pct}%`
+                            }),
                         ]),
-                        el('div', { class: 'progress' }, [
-                            el('div', { class: 'bar', style: { width: `${pct}%` } }),
+                        el('div', {
+                            class: 'progress'
+                        }, [
+                            el('div', {
+                                class: 'bar',
+                                style: {
+                                    width: `${pct}%`
+                                }
+                            }),
                         ]),
                     ]);
                     container.appendChild(live);
                 } else if (s.status === 'PENDING' || s.status === 'PROCESSING') {
                     // Generic loader when we don't have progress info
-                    const live = el('div', { class: 'card mb-24', style: { textAlign: 'center' } }, [
-                        el('span', { class: 'spinner' }),
+                    const live = el('div', {
+                        class: 'card mb-24',
+                        style: {
+                            textAlign: 'center'
+                        }
+                    }, [
+                        el('span', {
+                            class: 'spinner'
+                        }),
                         ' ',
-                        el('span', { class: 'muted', text: 'Grading in progress…' }),
+                        el('span', {
+                            class: 'muted',
+                            text: 'Grading in progress…'
+                        }),
                     ]);
                     container.appendChild(live);
                 }
@@ -119,11 +161,19 @@
                 // ============================================================
                 // Metadata card: user, problem, submitted time
                 // ============================================================
-                const meta = el('div', { class: 'card mb-24' });
-                meta.appendChild(el('div', { class: 'card-header' }, [
-                    el('h3', { text: 'Submission details' }),
+                const meta = el('div', {
+                    class: 'card mb-24'
+                });
+                meta.appendChild(el('div', {
+                    class: 'card-header'
+                }, [
+                    el('h3', {
+                        text: 'Submission details'
+                    }),
                 ]));
-                const metaGrid = el('div', { class: 'meta-grid' });
+                const metaGrid = el('div', {
+                    class: 'meta-grid'
+                });
 
                 if (s.username) {
                     metaGrid.appendChild(metaRow('Author', s.username));
@@ -152,38 +202,78 @@
                 // Error / output sections
                 // ============================================================
                 if (r && r.stderr) {
-                    container.appendChild(el('div', { class: 'card mb-24' }, [
-                        el('h3', { class: 'mb-0', text: 'Error output' }),
-                        el('pre', { class: 'code-block error-output mt-16', text: r.stderr }),
+                    container.appendChild(el('div', {
+                        class: 'card mb-24'
+                    }, [
+                        el('h3', {
+                            class: 'mb-0',
+                            text: 'Error output'
+                        }),
+                        el('pre', {
+                            class: 'code-block error-output mt-16',
+                            text: r.stderr
+                        }),
                     ]));
                 }
                 if (r && r.stdout) {
-                    container.appendChild(el('div', { class: 'card mb-24' }, [
-                        el('h3', { class: 'mb-0', text: 'Output' }),
-                        el('pre', { class: 'code-block mt-16', text: r.stdout }),
+                    container.appendChild(el('div', {
+                        class: 'card mb-24'
+                    }, [
+                        el('h3', {
+                            class: 'mb-0',
+                            text: 'Output'
+                        }),
+                        el('pre', {
+                            class: 'code-block mt-16',
+                            text: r.stdout
+                        }),
                     ]));
                 }
 
                 // ============================================================
                 // Source code
                 // ============================================================
-                container.appendChild(el('div', { class: 'card' }, [
-                    el('h3', { class: 'mb-0', text: 'Source code' }),
-                    el('pre', { class: 'code-block mt-16', text: s.source_code }),
+                container.appendChild(el('div', {
+                    class: 'card'
+                }, [
+                    el('h3', {
+                        class: 'mb-0',
+                        text: 'Source code'
+                    }),
+                    el('pre', {
+                        class: 'code-block mt-16',
+                        text: s.source_code
+                    }),
                 ]));
             }
 
             function metric(label, value) {
-                return el('div', { class: 'metric' }, [
-                    el('div', { class: 'metric-label', text: label }),
-                    el('div', { class: 'metric-value', text: value }),
+                return el('div', {
+                    class: 'metric'
+                }, [
+                    el('div', {
+                        class: 'metric-label',
+                        text: label
+                    }),
+                    el('div', {
+                        class: 'metric-value',
+                        text: value
+                    }),
                 ]);
             }
 
             function metaRow(label, value) {
-                return el('div', { class: 'meta-row' }, [
-                    el('span', { class: 'meta-label', text: label }),
-                    el('span', { class: 'meta-value', text: value }),
+                return el('div', {
+                    class: 'meta-row'
+                }, [
+                    el('span', {
+                        class: 'meta-label',
+                        text: label
+                    }),
+                    el('span', {
+                        class: 'meta-value',
+                        text: value
+                    }),
                 ]);
             }
 
@@ -191,15 +281,21 @@
                 if (!iso) return '—';
                 const d = new Date(iso);
                 return d.toLocaleString(undefined, {
-                    year: 'numeric', month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
                 });
             }
 
+            // 5. Render Skeleton immediately
+            container.appendChild(Skeleton.submissionPage());
+
             // Initial fetch + polling
-            stopFn = poll(async () => {
+            stopFn = poll(async() => {
                 const s = await Api.getSubmission(subId);
-                render(s);
+                render(s); // render() clears the container, removing the skeleton
                 return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(s.status);
             }, 1500);
 

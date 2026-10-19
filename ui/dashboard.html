@@ -18,8 +18,9 @@
             <a href="problems.html" class="btn">Browse Problems</a>
         </div>
 
-        <div class="card-grid mb-24" id="stats-grid"></div>
-
+        <div class="card-grid mb-24" id="stats-grid">
+            <!-- Initial skeletons appear before JavaScript fetches data -->
+        </div>
         <div id="heatmap-container"></div>
 
         <div class="card mb-24">
@@ -27,12 +28,7 @@
                 <h3>Recent Submissions</h3>
                 <a href="history.html" class="muted" style="font-size:12px;">View all →</a>
             </div>
-            <div id="recent-table">
-                <div class="loading-block">
-                    <span class="spinner"></span>
-                    <span>Loading...</span>
-                </div>
-            </div>
+            <div id="recent-table"></div>
         </div>
     </main>
 
@@ -48,6 +44,10 @@
 
             document.getElementById('greeting').textContent =
                 `Welcome back, ${user.username}`;
+
+            // 1. Render Skeletons immediately
+            document.getElementById('stats-grid').appendChild(Skeleton.statGrid(4));
+            document.getElementById('recent-table').appendChild(Skeleton.table(6, 5));
 
             (async function loadDashboard() {
                 try {

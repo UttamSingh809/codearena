@@ -13,21 +13,22 @@
         <h1>Leaderboard</h1>
         <p class="muted mb-24">Global ranking across all problems.</p>
 
-        <div id="leaderboard-view">
-            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
-        </div>
+        <div id="leaderboard-view"></div>
     </main>
 
     <script src="static/app.js"></script>
     <script>
         'use strict';
 
-        (function () {
+        (function() {
             if (!requireAuth('leaderboard')) return;
 
             const container = document.getElementById('leaderboard-view');
 
-            (async () => {
+            // 4. Render Skeleton immediately
+            loadingState(container, 'leaderboard');
+
+            (async() => {
                 try {
                     const rows = await Api.leaderboard(100, 0);
 
@@ -40,11 +41,24 @@
                     const table = el('table');
                     table.appendChild(el('thead', {}, [
                         el('tr', {}, [
-                            el('th', { text: 'Rank' }),
-                            el('th', { text: 'User' }),
-                            el('th', { class: 'num', text: 'Score' }),
-                            el('th', { class: 'num', text: 'Solved' }),
-                            el('th', { class: 'num', text: 'Submissions' }),
+                            el('th', {
+                                text: 'Rank'
+                            }),
+                            el('th', {
+                                text: 'User'
+                            }),
+                            el('th', {
+                                class: 'num',
+                                text: 'Score'
+                            }),
+                            el('th', {
+                                class: 'num',
+                                text: 'Solved'
+                            }),
+                            el('th', {
+                                class: 'num',
+                                text: 'Submissions'
+                            }),
                         ]),
                     ]));
                     const tbody = el('tbody');
@@ -57,18 +71,34 @@
 
                         tbody.appendChild(el('tr', {}, [
                             el('td', {}, [
-                                el('span', { class: `rank-medal ${medalClass}`, text: String(rank) }),
+                                el('span', {
+                                    class: `rank-medal ${medalClass}`,
+                                    text: String(rank)
+                                }),
                             ]),
-                            el('td', { text: r.username }),
-                            el('td', { class: 'num', text: String(r.total_score) }),
-                            el('td', { class: 'num', text: String(r.total_solved) }),
-                            el('td', { class: 'num', text: String(r.total_submissions) }),
+                            el('td', {
+                                text: r.username
+                            }),
+                            el('td', {
+                                class: 'num',
+                                text: String(r.total_score)
+                            }),
+                            el('td', {
+                                class: 'num',
+                                text: String(r.total_solved)
+                            }),
+                            el('td', {
+                                class: 'num',
+                                text: String(r.total_submissions)
+                            }),
                         ]));
                     }
                     table.appendChild(tbody);
 
                     clear(container);
-                    container.appendChild(el('div', { class: 'table-wrap' }, [table]));
+                    container.appendChild(el('div', {
+                        class: 'table-wrap'
+                    }, [table]));
                 } catch (err) {
                     emptyState(container, 'Failed to load', err.message || 'Unknown error');
                     toast(err.message || 'Failed to load leaderboard', 'error');

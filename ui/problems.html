@@ -23,9 +23,7 @@
             </select>
         </div>
 
-        <div id="problems-view">
-            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
-        </div>
+        <div id="problems-view"></div>
     </main>
 
     <script src="static/app.js"></script>
@@ -87,6 +85,9 @@
 
             search.addEventListener('input', render);
             diffFilter.addEventListener('change', render);
+
+            // 2. Render Skeleton immediately
+            loadingState(container, 'table', { cols: 5, rows: 8 });
 
             (async () => {
                 try {
