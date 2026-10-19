@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import db, queue
 from .config import settings
-from .routers import auth, health, leaderboard, problems, submissions
+from .routers import auth, health, leaderboard, problems, submissions, stats
 
 
 # ------------------------------------------------------------------
@@ -74,6 +74,7 @@ app.include_router(auth.router)
 app.include_router(problems.router)
 app.include_router(submissions.router)
 app.include_router(leaderboard.router)
+app.include_router(stats.router)
 
 
 @app.get("/")

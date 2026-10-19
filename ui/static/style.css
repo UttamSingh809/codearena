@@ -1430,3 +1430,498 @@ main.problem-layout {
     color: var(--primary);
     font-variant-numeric: tabular-nums;
 }
+/* ============================================================
+   CodeArena — Theme-matched submission activity heatmap
+   ============================================================ */
+
+.heatmap-card {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 24px;
+    background: var(--bg-2);
+    border: 1px solid #f1d7d0;
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+}
+
+.heatmap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.heatmap-header h3 {
+    margin: 0;
+    color: #a66e6b;
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.heatmap-header .heatmap-total {
+    color: #98716e;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Remove the unwanted vertical scrollbar */
+.heatmap-scroll {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 2px 10px;
+    scrollbar-width: thin;
+    scrollbar-color: #e8c6bd transparent;
+}
+
+/* Month labels */
+.heatmap-months {
+    display: flex;
+    gap: 4px;
+    margin-left: 30px;
+    margin-bottom: 10px;
+    min-width: max-content;
+}
+
+.heatmap-months span {
+    width: 17px;
+    flex: 0 0 17px;
+    color: #98716e;
+    font-size: 11px;
+}
+
+/* Calendar layout */
+.heatmap-grid {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: max-content;
+}
+
+.heatmap-days {
+    display: grid;
+    grid-template-rows: repeat(7, 17px);
+    gap: 4px;
+    padding-top: 0;
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+
+.heatmap-days span {
+    height: 17px;
+    line-height: 17px;
+    padding-right: 4px;
+    color: #a77b77;
+    font-size: 10px;
+    text-align: right;
+}
+
+.heatmap-days span.empty {
+    visibility: hidden;
+}
+
+/* Slightly larger cells use the available space better */
+.heatmap-columns {
+    display: flex;
+    gap: 4px;
+    position: relative;
+}
+
+.heatmap-week {
+    display: grid;
+    grid-template-rows: repeat(7, 17px);
+    gap: 4px;
+    flex: 0 0 17px;
+}
+
+.heatmap-cell {
+    width: 17px;
+    height: 17px;
+    min-width: 17px;
+    min-height: 17px;
+    box-sizing: border-box;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        background-color 0.15s ease,
+        transform 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+/* No activity — warm neutral peach */
+.heatmap-cell.level-0 {
+    background: #f7e5df;
+    border: 1px solid #efd4cc;
+}
+
+/* Low activity — light coral */
+.heatmap-cell.level-1 {
+    background: #f8c9bd;
+    border: 1px solid #f1b5a8;
+}
+
+/* Moderate activity — soft coral-red */
+.heatmap-cell.level-2 {
+    background: #f59b91;
+    border: 1px solid #ed8a80;
+}
+
+/* High activity — CodeArena coral */
+.heatmap-cell.level-3 {
+    background: #ee6970;
+    border: 1px solid #e75a63;
+}
+
+/* Highest activity — deep coral-red */
+.heatmap-cell.level-4 {
+    background: #d94150;
+    border: 1px solid #cf3545;
+}
+
+/* Subtle hover effect */
+.heatmap-cell:hover {
+    outline: 2px solid #bd5c60;
+    outline-offset: 1px;
+    transform: scale(1.12);
+    position: relative;
+    z-index: 2;
+}
+
+/* Legend */
+.heatmap-legend {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 18px;
+    color: #98716e;
+    font-size: 11px;
+}
+
+.heatmap-legend .heatmap-cell {
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
+    min-height: 14px;
+    border-radius: 3px;
+    cursor: default;
+}
+
+.heatmap-legend .heatmap-cell:hover {
+    outline: none;
+    transform: none;
+}
+
+/* Tooltip */
+.heatmap-tooltip {
+    position: fixed;
+    z-index: 1000;
+    padding: 8px 12px;
+    background: #fffaf8;
+    color: #482b2b;
+    border: 1px solid #f0d6ce;
+    border-radius: 7px;
+    box-shadow: 0 6px 20px rgba(100, 50, 45, 0.12);
+    font-size: 12px;
+    pointer-events: none;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.heatmap-tooltip.visible {
+    opacity: 1;
+}
+
+/* Smaller screens */
+@media (max-width: 600px) {
+    .heatmap-card {
+        padding: 16px;
+    }
+
+    .heatmap-header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 18px;
+    }
+
+    .heatmap-scroll {
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .heatmap-cell {
+        width: 13px;
+        height: 13px;
+        min-width: 13px;
+        min-height: 13px;
+        border-radius: 3px;
+    }
+
+    .heatmap-week {
+        grid-template-rows: repeat(7, 13px);
+        flex-basis: 13px;
+        gap: 3px;
+    }
+
+    .heatmap-columns,
+    .heatmap-months {
+        gap: 3px;
+    }
+
+    .heatmap-months span {
+        width: 13px;
+        flex-basis: 13px;
+    }
+
+    .heatmap-days {
+        grid-template-rows: repeat(7, 13px);
+        gap: 3px;
+    }
+
+    .heatmap-days span {
+        height: 13px;
+        line-height: 13px;
+    }
+}
+
+/* ============================================================
+ * Skeleton loaders
+ * ============================================================
+ *
+ * Base class .skeleton renders a shimmering placeholder.
+ * Shape modifiers (.skeleton-line, .skeleton-title, etc.)
+ * control width and height. Combine with flex/grid containers
+ * to match the incoming content's layout.
+ */
+
+.skeleton {
+    position: relative;
+    background: var(--bg-3);
+    border-radius: 4px;
+    overflow: hidden;
+    /* Reserve space even when empty so layout doesn't shift */
+    display: inline-block;
+}
+
+/* Shimmer effect — a diagonal gradient sweeping left to right */
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.05) 50%,
+        transparent 100%
+    );
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .skeleton::after { animation: none; }
+    .skeleton { animation: skeleton-pulse 1.8s ease-in-out infinite; }
+    @keyframes skeleton-pulse {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.6; }
+    }
+}
+
+/* ---- Shape modifiers ---- */
+
+.skeleton-line {
+    height: 12px;
+    width: 100%;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.skeleton-line.short  { width: 40%; }
+.skeleton-line.medium { width: 65%; }
+.skeleton-line.long   { width: 85%; }
+
+.skeleton-title {
+    height: 20px;
+    width: 60%;
+    display: block;
+    margin-bottom: 12px;
+}
+
+.skeleton-subtitle {
+    height: 14px;
+    width: 40%;
+    display: block;
+    margin-bottom: 10px;
+}
+
+.skeleton-circle {
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+}
+
+.skeleton-circle.sm { width: 28px; height: 28px; }
+.skeleton-circle.lg { width: 56px; height: 56px; }
+
+.skeleton-badge {
+    height: 20px;
+    width: 60px;
+    border-radius: 10px;
+    display: inline-block;
+}
+
+.skeleton-cell {
+    height: 12px;
+    width: 100%;
+    display: block;
+}
+
+/* Utility: skeleton inside a table cell */
+.skeleton-cell.sm  { width: 40px; }
+.skeleton-cell.md  { width: 80px; }
+.skeleton-cell.lg  { width: 140px; }
+
+/* ---- Pre-built skeleton layouts ---- */
+
+/* Stat card: matches .stat on dashboard */
+.skeleton-stat {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.skeleton-stat .skeleton-line.short { width: 35%; height: 10px; margin: 0; }
+.skeleton-stat .skeleton-title      { width: 55%; margin: 0; }
+.skeleton-stat .skeleton-line.medium{ width: 45%; height: 10px; margin: 0; }
+
+/* Table skeleton: N rows of shimmering cells */
+.skeleton-table {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.skeleton-table-row {
+    display: grid;
+    grid-template-columns: repeat(var(--cols, 5), 1fr);
+    gap: 16px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+}
+
+.skeleton-table-row:last-child { border-bottom: none; }
+
+.skeleton-table-row.header {
+    background: var(--bg-1);
+    padding: 12px 16px;
+}
+
+.skeleton-table-row.header .skeleton-cell {
+    height: 10px;
+    opacity: 0.6;
+}
+
+/* Problem page skeleton — statement + editor */
+.skeleton-problem-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.skeleton-problem-meta {
+    display: flex;
+    gap: 10px;
+}
+
+.skeleton-problem-section {
+    margin-bottom: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.skeleton-editor {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.skeleton-editor-body {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    height: 380px;
+    position: relative;
+    overflow: hidden;
+}
+
+.skeleton-editor-body::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.03) 50%,
+        transparent 100%
+    );
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Submission page skeleton — verdict hero + details */
+.skeleton-verdict-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 28px 32px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+}
+
+.skeleton-verdict-hero .left {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.skeleton-verdict-hero .metrics {
+    display: flex;
+    gap: 32px;
+}
+
+.skeleton-verdict-hero .metrics > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-end;
+}

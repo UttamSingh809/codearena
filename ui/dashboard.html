@@ -2,8 +2,8 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CodeArena — Dashboard</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
@@ -13,14 +13,14 @@
         <div class="flex gap-16" style="align-items:center;justify-content:space-between;margin-bottom:32px;">
             <div>
                 <h1 id="greeting">Welcome back</h1>
-                <p class="muted" id="subtitle">Loading your stats…</p>
+                <p class="muted" id="subtitle">Loading your stats...</p>
             </div>
             <a href="problems.html" class="btn">Browse Problems</a>
         </div>
 
-        <div class="card-grid mb-24" id="stats-grid">
-            <!-- populated by JS -->
-        </div>
+        <div class="card-grid mb-24" id="stats-grid"></div>
+
+        <div id="heatmap-container"></div>
 
         <div class="card mb-24">
             <div class="card-header">
@@ -28,98 +28,486 @@
                 <a href="history.html" class="muted" style="font-size:12px;">View all →</a>
             </div>
             <div id="recent-table">
-                <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
+                <div class="loading-block">
+                    <span class="spinner"></span>
+                    <span>Loading...</span>
+                </div>
             </div>
         </div>
     </main>
 
     <script src="static/app.js"></script>
+
     <script>
-'use strict';
+        'use strict';
 
-(function () {
-    if (!requireAuth('dashboard')) return;
+        (function () {
+            if (!requireAuth('dashboard')) return;
 
-    const user = Auth.getUser();
-    document.getElementById('greeting').textContent = `Welcome back, ${user.username}`;
+            const user = Auth.getUser();
 
-    (async () => {
-        try {
-            const subs = await Api.listSubmissions(10, 0);
-            const items = subs.items;
+            document.getElementById('greeting').textContent =
+                `Welcome back, ${user.username}`;
 
-            // Stats
-            const totalSubs = subs.total;
-            const acCount = items.filter(s => s.verdict === 'AC').length;
-            const accepted = items.filter(s => s.verdict === 'AC');
-            const totalScore = accepted.reduce((sum, s) => sum + (s.score || 0), 0);
-            const bestRuntime = accepted.length
-                ? Math.min(...accepted.map(s => s.runtime_ms || Infinity))
-                : null;
+            (async function loadDashboard() {
+                try {
+                    const subs = await Api.listSubmissions(10, 0);
+                    const items = subs.items || [];
+                    const totalSubs = subs.total || 0;
 
-            document.getElementById('subtitle').textContent =
-                `Member since ${formatDate(user.created_at || new Date())}`;
+                    const accepted = items.filter(
+                        s => s.verdict === 'AC'
+                    );
 
-            const statsGrid = document.getElementById('stats-grid');
-            clear(statsGrid);
-            statsGrid.appendChild(statCard('Total Submissions', totalSubs, 'across all problems'));
-            statsGrid.appendChild(statCard('Accepted', acCount, 'in recent 10'));
-            statsGrid.appendChild(statCard('Score', totalScore, 'earned so far'));
-            statsGrid.appendChild(statCard('Best Runtime',
-                bestRuntime ? `${bestRuntime} ms` : '—',
-                'fastest AC'));
+                    const totalScore = accepted.reduce(
+                        (sum, s) => sum + (s.score || 0), 0
+                    );
 
-            // Recent table
-            const container = document.getElementById('recent-table');
-            if (!items.length) {
-                emptyState(container, 'No submissions yet',
-                    'Head over to Problems and submit your first solution.');
-                return;
+                    const runtimes = accepted
+                        .map(s => s.runtime_ms)
+                        .filter(n => n != null && n > 0);
+
+                    const bestRuntime = runtimes.length
+                        ? Math.min(...runtimes)
+                        : null;
+
+                    document.getElementById('subtitle').textContent =
+                        `Member since ${formatDate(user.created_at || new Date())}`;
+
+                    const statsGrid =
+                        document.getElementById('stats-grid');
+
+                    clear(statsGrid);
+
+                    statsGrid.appendChild(
+                        statCard('Total Submissions', totalSubs, 'across all problems')
+                    );
+
+                    statsGrid.appendChild(
+                        statCard('Accepted', accepted.length, 'in recent 10')
+                    );
+
+                    statsGrid.appendChild(
+                        statCard('Score', totalScore, 'earned so far')
+                    );
+
+                    statsGrid.appendChild(
+                        statCard(
+                            'Best Runtime',
+                            bestRuntime != null ? `${bestRuntime} ms` : '—',
+                            'fastest AC'
+                        )
+                    );
+
+                    const container =
+                        document.getElementById('recent-table');
+
+                    if (!items.length) {
+                        emptyState(
+                            container,
+                            'No submissions yet',
+                            'Head over to Problems and submit your first solution.'
+                        );
+                        return;
+                    }
+
+                    const table = el('table');
+
+                    table.appendChild(el('thead', {}, [
+                        el('tr', {}, [
+                            el('th', { text: 'Problem' }),
+                            el('th', { text: 'Language' }),
+                            el('th', { text: 'Verdict' }),
+                            el('th', { class: 'num', text: 'Runtime' }),
+                            el('th', { class: 'num', text: 'Memory' }),
+                            el('th', { text: 'Submitted' })
+                        ])
+                    ]));
+
+                    const tbody = el('tbody');
+
+                    for (const s of items) {
+                        tbody.appendChild(el('tr', {}, [
+                            el('td', {}, [
+                                el('a', {
+                                    href: `submission.html?id=${s.id}`,
+                                    text: s.problem_title ||
+                                        `Problem ${s.problem_id}`
+                                })
+                            ]),
+                            el('td', {
+                                text: s.language || '—'
+                            }),
+                            el('td', {}, [
+                                verdictBadge(s.verdict || s.status)
+                            ]),
+                            el('td', {
+                                class: 'num',
+                                text: s.runtime_ms != null
+                                    ? `${s.runtime_ms} ms`
+                                    : '—'
+                            }),
+                            el('td', {
+                                class: 'num',
+                                text: s.memory_kb != null
+                                    ? `${formatNumber(s.memory_kb)} KB`
+                                    : '—'
+                            }),
+                            el('td', {
+                                class: 'muted',
+                                text: formatDate(s.submitted_at)
+                            })
+                        ]));
+                    }
+
+                    table.appendChild(tbody);
+                    clear(container);
+                    container.appendChild(table);
+
+                } catch (err) {
+                    toast(
+                        err.message || 'Failed to load dashboard',
+                        'error'
+                    );
+                }
+            })();
+
+            function statCard(label, value, sub) {
+                return el('div', { class: 'stat' }, [
+                    el('div', {
+                        class: 'stat-label',
+                        text: label
+                    }),
+                    el('div', {
+                        class: 'stat-value',
+                        text: String(value)
+                    }),
+                    sub && el('div', {
+                        class: 'stat-sub',
+                        text: sub
+                    })
+                ]);
+            }
+        })();
+    </script>
+
+    <script>
+        'use strict';
+
+        (function () {
+            const container =
+                document.getElementById('heatmap-container');
+
+            if (!container) return;
+
+            const MONTHS = [
+                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+            ];
+
+            function levelFor(count) {
+                if (count <= 0) return 0;
+                if (count <= 2) return 1;
+                if (count <= 5) return 2;
+                if (count <= 10) return 3;
+                return 4;
             }
 
-            const table = el('table');
-            table.appendChild(el('thead', {}, [
-                el('tr', {}, [
-                    el('th', { text: 'Problem' }),
-                    el('th', { text: 'Language' }),
-                    el('th', { text: 'Verdict' }),
-                    el('th', { class: 'num', text: 'Runtime' }),
-                    el('th', { class: 'num', text: 'Memory' }),
-                    el('th', { text: 'Submitted' }),
-                ]),
-            ]));
-            const tbody = el('tbody');
-            for (const s of items) {
-                tbody.appendChild(el('tr', {}, [
-                    el('td', {}, [
-                        el('a', {
-                            href: `submission.html?id=${s.id}`,
-                            text: s.problem_title || `Problem ${s.problem_id}`,
-                        }),
-                    ]),
-                    el('td', { text: s.language }),
-                    el('td', {}, [verdictBadge(s.verdict || s.status)]),
-                    el('td', { class: 'num', text: s.runtime_ms != null ? `${s.runtime_ms} ms` : '—' }),
-                    el('td', { class: 'num', text: s.memory_kb != null ? `${formatNumber(s.memory_kb)} KB` : '—' }),
-                    el('td', { class: 'muted', text: formatDate(s.submitted_at) }),
-                ]));
-            }
-            table.appendChild(tbody);
-            clear(container);
-            container.appendChild(table);
-        } catch (err) {
-            toast(err.message || 'Failed to load dashboard', 'error');
-        }
-    })();
+            async function render() {
+                let data;
 
-    function statCard(label, value, sub) {
-        return el('div', { class: 'stat' }, [
-            el('div', { class: 'stat-label', text: label }),
-            el('div', { class: 'stat-value', text: String(value) }),
-            sub && el('div', { class: 'stat-sub', text: sub }),
-        ]);
-    }
-})();
+                try {
+                    data = await apiFetch(
+                        '/api/stats/heatmap?days=365'
+                    );
+                } catch (err) {
+                    clear(container);
+
+                    container.appendChild(
+                        el('div', { class: 'empty' }, [
+                            el('p', {
+                                text: 'Could not load submission activity.'
+                            })
+                        ])
+                    );
+
+                    console.error('Heatmap loading failed:', err);
+                    return;
+                }
+
+                const start = new Date(data.start + 'T00:00:00Z');
+                const end = new Date(data.end + 'T00:00:00Z');
+
+                const startSunday = new Date(start);
+
+                startSunday.setUTCDate(
+                    startSunday.getUTCDate() -
+                    startSunday.getUTCDay()
+                );
+
+                const days = [];
+                const cursor = new Date(startSunday);
+
+                while (cursor <= end) {
+                    const key = cursor.toISOString().slice(0, 10);
+                    const inRange = cursor >= start && cursor <= end;
+
+                    days.push({
+                        date: new Date(cursor),
+                        key,
+                        count: inRange
+                            ? (data.days[key] || 0)
+                            : -1,
+                        inRange
+                    });
+
+                    cursor.setUTCDate(cursor.getUTCDate() + 1);
+                }
+
+                const columns = [];
+
+                for (let i = 0; i < days.length; i += 7) {
+                    columns.push(days.slice(i, i + 7));
+                }
+
+                clear(container);
+
+                const card = el('div', {
+                    class: 'heatmap-card'
+                });
+
+                const header = el('div', {
+                    class: 'heatmap-header'
+                }, [
+                    el('h3', {
+                        text: 'Submission Activity'
+                    }),
+                    el('span', {
+                        class: 'heatmap-total',
+                        text: `${data.total || 0} submission${data.total === 1 ? '' : 's'} in the last year`
+                    })
+                ]);
+
+                card.appendChild(header);
+
+                const scroll = el('div', {
+                    class: 'heatmap-scroll'
+                });
+
+                const outer = el('div');
+
+                /*
+                 * Month labels and week columns use matching slots.
+                 * Month starts receive the same visual gap in both rows.
+                 */
+                const monthLabels = el('div', {
+                    class: 'heatmap-months'
+                });
+
+                const monthStarts = [];
+                let lastMonth = -1;
+
+                for (const week of columns) {
+                    const monthDay = week.find(day =>
+                        day &&
+                        day.inRange &&
+                        day.date.getUTCDate() === 1
+                    );
+
+                    const firstInRange = week.find(day =>
+                        day && day.inRange
+                    );
+
+                    const labelDay = monthDay || firstInRange;
+
+                    const month = labelDay
+                        ? labelDay.date.getUTCMonth()
+                        : -1;
+
+                    const startsMonth =
+                        Boolean(monthDay && month !== lastMonth);
+
+                    monthStarts.push(startsMonth);
+
+                    let label = '';
+
+                    if (labelDay && month !== lastMonth) {
+                        label = MONTHS[month];
+                        lastMonth = month;
+                    }
+
+                    monthLabels.appendChild(
+                        el('span', {
+                            class: startsMonth
+                                ? 'month-label month-start'
+                                : 'month-label',
+                            text: label
+                        })
+                    );
+                }
+
+                outer.appendChild(monthLabels);
+
+                /*
+                 * IMPORTANT:
+                 * Declare columnsContainer before appending week columns.
+                 * This avoids the ReferenceError from the previous version.
+                 */
+                const grid = el('div', {
+                    class: 'heatmap-grid'
+                });
+
+                const columnsContainer = el('div', {
+                    class: 'heatmap-columns'
+                });
+
+                for (
+                    let weekIndex = 0;
+                    weekIndex < columns.length;
+                    weekIndex++
+                ) {
+                    const week = columns[weekIndex];
+
+                    const startsMonth = monthStarts[weekIndex];
+
+                    const weekCol = el('div', {
+                        class: startsMonth
+                            ? 'heatmap-week month-start'
+                            : 'heatmap-week'
+                    });
+
+                    for (let dow = 0; dow < 7; dow++) {
+                        const day = week[dow];
+
+                        if (!day || !day.inRange) {
+                            weekCol.appendChild(
+                                el('div', {
+                                    class: 'heatmap-cell',
+                                    style: {
+                                        visibility: 'hidden'
+                                    }
+                                })
+                            );
+
+                            continue;
+                        }
+
+                        const level = levelFor(day.count);
+
+                        const cell = el('div', {
+                            class: `heatmap-cell level-${level}`,
+                            'data-date': day.key,
+                            'data-count': String(day.count),
+                            title: `${day.count} submission${day.count === 1 ? '' : 's'} on ${day.key}`
+                        });
+
+                        weekCol.appendChild(cell);
+                    }
+
+                    columnsContainer.appendChild(weekCol);
+                }
+
+                grid.appendChild(columnsContainer);
+                outer.appendChild(grid);
+
+                const legend = el('div', {
+                    class: 'heatmap-legend'
+                }, [
+                    el('span', { text: 'Less' }),
+                    el('div', { class: 'heatmap-cell level-0' }),
+                    el('div', { class: 'heatmap-cell level-1' }),
+                    el('div', { class: 'heatmap-cell level-2' }),
+                    el('div', { class: 'heatmap-cell level-3' }),
+                    el('div', { class: 'heatmap-cell level-4' }),
+                    el('span', { text: 'More' })
+                ]);
+
+                scroll.appendChild(outer);
+                card.appendChild(scroll);
+                card.appendChild(legend);
+                container.appendChild(card);
+
+                attachTooltip(card);
+            }
+
+            function attachTooltip(scope) {
+                const tooltip = el('div', {
+                    class: 'heatmap-tooltip'
+                });
+
+                document.body.appendChild(tooltip);
+
+                scope.addEventListener('mouseover', event => {
+                    const cell = event.target.closest(
+                        '.heatmap-cell[data-date]'
+                    );
+
+                    if (!cell) return;
+
+                    const count = Number(cell.dataset.count);
+
+                    const date = new Date(
+                        cell.dataset.date + 'T00:00:00Z'
+                    );
+
+                    const formatted = date.toLocaleDateString(
+                        undefined,
+                        {
+                            weekday: 'short',
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            timeZone: 'UTC'
+                        }
+                    );
+
+                    tooltip.textContent =
+                        `${count} submission${count === 1 ? '' : 's'} on ${formatted}`;
+
+                    tooltip.classList.add('visible');
+                });
+
+                scope.addEventListener('mousemove', event => {
+                    const cell = event.target.closest(
+                        '.heatmap-cell[data-date]'
+                    );
+
+                    if (!cell) {
+                        tooltip.classList.remove('visible');
+                        return;
+                    }
+
+                    const rect = cell.getBoundingClientRect();
+
+                    tooltip.style.left = `${Math.max(
+                        8,
+                        Math.min(
+                            window.innerWidth - tooltip.offsetWidth - 8,
+                            rect.left + rect.width / 2 -
+                            tooltip.offsetWidth / 2
+                        )
+                    )}px`;
+
+                    tooltip.style.top = `${Math.max(
+                        8,
+                        rect.top - tooltip.offsetHeight - 8
+                    )}px`;
+                });
+
+                scope.addEventListener('mouseout', event => {
+                    if (
+                        !event.relatedTarget ||
+                        !event.relatedTarget.closest(
+                            '.heatmap-cell[data-date]'
+                        )
+                    ) {
+                        tooltip.classList.remove('visible');
+                    }
+                });
+            }
+
+            render();
+        })();
     </script>
 </body>
 
