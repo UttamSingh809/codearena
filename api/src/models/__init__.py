@@ -1,5 +1,5 @@
 from .user import (
-    RegisterRequest, LoginRequest, UserPublic, TokenResponse,
+    RegisterRequest, LoginRequest, UserPublic, TokenResponse, UserStreak,
 )
 from .problem import ProblemSummary, ProblemDetail
 from .submission import (
@@ -11,5 +11,5 @@ __all__ = [
     "RegisterRequest", "LoginRequest", "UserPublic", "TokenResponse",
     "ProblemSummary", "ProblemDetail",
     "SubmitRequest", "SubmissionCreated", "ResultDetail",
-    "SubmissionDetail", "SubmissionSummary", "SubmissionListResponse",
+    "SubmissionDetail", "SubmissionSummary", "SubmissionListResponse", "TestCaseResult", "UserStreak",
 ]

@@ -56,3 +56,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserPublic
+
+
+class UserStreak(BaseModel):
+    current_streak: int
+    last_submission_date: Optional[str] = None

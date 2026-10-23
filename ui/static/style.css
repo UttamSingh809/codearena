@@ -1996,3 +1996,32 @@ main.problem-layout {
     gap: 6px;
     align-items: flex-end;
 }
+
+
+/* Streak badge in header */
+
+.streak-badge {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--tertiary-dim);
+    color: var(--tertiary);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: default;
+    animation: pulse-fire 2s ease-in-out infinite;
+}
+
+@keyframes pulse-fire {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.9;
+    }
+}

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>CodeArena — Problem</title>
     <link rel="stylesheet" href="static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 </head>
 
 <body>
@@ -269,14 +270,15 @@
                 const stop = poll(async() => {
                     const s = await Api.getSubmission(subId);
                     renderResult(s);
-                    if (['COMPLETED', 'FAILED', 'CANCELLED'].includes(s.status)) {
+                    if (["COMPLETED", "FAILED", "CANCELLED"].includes(s.status)) {
                         submitBtn.disabled = false;
-                        submitBtn.textContent = 'Submit';
-                        submitStat.textContent = '';
-                        if (s.result && s.result.verdict === 'AC') {
-                            toast('Accepted!', 'success');
+                        submitBtn.textContent = "Submit";
+                        submitStat.textContent = "";
+                        if (s.result && s.result.verdict === "AC") {
+                            toast("Accepted!", "success");
+                            celebrateAC(); // <-- TRIGGER CONFETTI
                         } else if (s.result) {
-                            toast(`Verdict: ${s.result.verdict}`, 'warn');
+                            toast(`Verdict: ${s.result.verdict}`, "warn");
                         }
                         return true;
                     }

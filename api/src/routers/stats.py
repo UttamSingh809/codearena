@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query
 
 from .. import db
 from ..deps import CurrentUser, get_current_user
+from ..models import UserStreak
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -73,3 +74,49 @@ async def submission_heatmap(
         "total": total,
         "max":   max_count,
     }
+
+
+@router.get("/streak", response_model=UserStreak)
+async def get_user_streak(user: CurrentUser = Depends(get_current_user)):
+    """
+    Calculate the current daily streak based on accepted submissions.
+    A streak counts consecutive days with at least one AC.
+    If the last AC was today or yesterday, the streak is active.
+    """
+    # Get distinct days with at least one AC, ordered descending
+    rows = await db.fetch_all(
+        """
+        SELECT DISTINCT (r.graded_at AT TIME ZONE 'UTC')::date AS day
+        FROM results r
+        JOIN submissions s ON s.id = r.submission_id
+        WHERE s.user_id = $1 AND r.verdict = 'AC'
+        ORDER BY day DESC
+        """,
+        user.id,
+    )
+
+    if not rows:
+        return UserStreak(current_streak=0, last_submission_date=None)
+
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    
+    days = [row["day"] for row in rows]
+    last_date = days[0]
+
+    # If the last submission is older than yesterday, the streak is broken
+    if last_date < yesterday:
+        return UserStreak(current_streak=0, last_submission_date=last_date.isoformat())
+
+    # Count backwards
+    streak = 1
+    expected = last_date - timedelta(days=1)
+    
+    for day in days[1:]:
+        if day == expected:
+            streak += 1
+            expected -= timedelta(days=1)
+        else:
+            break
+
+    return UserStreak(current_streak=streak, last_submission_date=last_date.isoformat())

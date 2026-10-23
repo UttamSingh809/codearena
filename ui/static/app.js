@@ -4,9 +4,9 @@
 // CodeArena UI — shared helpers
 // ============================================================
 
-const API_BASE = window.location.origin.includes(':3000')
-    ? 'http://localhost:8000'
-    : '';
+const API_BASE = window.location.origin.includes(':3000') ?
+    'http://localhost:8000' :
+    '';
 
 const TOKEN_KEY = 'codearena_token';
 const USER_KEY = 'codearena_user';
@@ -47,8 +47,7 @@ const Auth = {
     getToken() { return localStorage.getItem(TOKEN_KEY); },
     getUser() {
         const raw = localStorage.getItem(USER_KEY);
-        try { return raw ? JSON.parse(raw) : null; }
-        catch { return null; }
+        try { return raw ? JSON.parse(raw) : null; } catch { return null; }
     },
     clear() {
         localStorage.removeItem(TOKEN_KEY);
@@ -61,7 +60,10 @@ const Auth = {
             throw new Error('not logged in');
         }
     },
-    logout() { this.clear(); location.href = 'index.html'; },
+    logout() {
+        this.clear();
+        location.href = 'index.html';
+    },
 };
 
 // ------------------------------------------------------------------
@@ -77,8 +79,7 @@ class ApiError extends Error {
 }
 
 async function apiFetch(path, options = {}) {
-    const headers = Object.assign(
-        { 'Content-Type': 'application/json' },
+    const headers = Object.assign({ 'Content-Type': 'application/json' },
         options.headers || {},
     );
 
@@ -121,6 +122,7 @@ const Api = {
         apiFetch(`/api/submissions?limit=${limit}&offset=${offset}`),
     leaderboard: (limit = 50, offset = 0) =>
         apiFetch(`/api/leaderboard?limit=${limit}&offset=${offset}`),
+    getStreak: () => apiFetch('/api/stats/streak'),
 };
 
 // ------------------------------------------------------------------
@@ -139,7 +141,7 @@ function el(tag, attrs = {}, children = []) {
             node.addEventListener(k.slice(2).toLowerCase(), v);
         } else node.setAttribute(k, v);
     }
-    for (const child of [].concat(children)) {
+    for (const child of[].concat(children)) {
         if (child == null || child === false) continue;
         if (typeof child === 'string') node.appendChild(document.createTextNode(child));
         else node.appendChild(child);
@@ -166,7 +168,9 @@ function formatDate(iso) {
     if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)}d ago`;
 
     return d.toLocaleDateString(undefined, {
-        year: 'numeric', month: 'short', day: 'numeric',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
     });
 }
 
@@ -211,9 +215,27 @@ function renderHeader(activePage) {
 
     if (user) {
         const menu = el('div', { class: 'user-menu' });
+
+        // NEW: Streak Badge
+        const streakContainer = el('div', {
+            id: 'header-streak',
+            class: 'streak-badge hidden',
+            title: 'Daily streak'
+        });
+        menu.appendChild(streakContainer);
+
+        // Fetch streak asynchronously and update
+        Api.getStreak().then(data => {
+            if (data && data.current_streak > 0) {
+                streakContainer.textContent = `🔥 ${data.current_streak}`;
+                streakContainer.classList.remove('hidden');
+            }
+        }).catch(() => { /* ignore errors, streak is optional */ });
+
         const initial = (user.username || '?').charAt(0).toUpperCase();
         menu.appendChild(el('div', { class: 'avatar', text: initial }));
         menu.appendChild(el('span', { text: user.username }));
+
         const logout = el('button', {
             class: 'btn-logout',
             text: 'Logout',
@@ -527,4 +549,41 @@ const VERDICT_INFO = {
 
 function verdictLabel(v) {
     return (VERDICT_INFO[v] || { label: v }).label;
+}
+
+// ------------------------------------------------------------------
+// Celebrations
+// ------------------------------------------------------------------
+
+function celebrateAC() {
+    if (typeof confetti === 'undefined') return; // CDN blocked or not loaded
+
+    // Fire three bursts with slight delays for a more dramatic effect
+    const duration = 1500;
+    const animationEnd = Date.now() + duration;
+    const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 9999 };
+
+    function randomInRange(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+
+    const interval = setInterval(function() {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+            return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+
+        // Fire from two sides
+        confetti(Object.assign({}, defaults, {
+            particleCount,
+            origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }
+        }));
+        confetti(Object.assign({}, defaults, {
+            particleCount,
+            origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }
+        }));
+    }, 250);
 }

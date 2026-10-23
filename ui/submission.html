@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>CodeArena — Submission</title>
     <link rel="stylesheet" href="static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
 </head>
 
 <body>
@@ -32,12 +33,22 @@
 
             let stopFn = null;
 
+            let hasCelebrated = false;
+
             function render(s) {
                 document.title = `CodeArena — Submission #${s.id}`;
                 clear(container);
 
                 const r = s.result;
                 const verdict = r ? r.verdict : s.status;
+                if (verdict === 'AC' && !hasCelebrated) {
+                    hasCelebrated = true;
+                    // Only celebrate if the submission just completed (within the last 10 seconds)
+                    const gradedAt = new Date(r.graded_at).getTime();
+                    if (Date.now() - gradedAt < 10000) {
+                        celebrateAC();
+                    }
+                }
                 const info = VERDICT_INFO[verdict] || {
                     label: verdict
                 };
