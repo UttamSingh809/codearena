@@ -189,6 +189,73 @@ function difficultyBadge(d) {
 }
 
 // ------------------------------------------------------------------
+// Icons
+// ------------------------------------------------------------------
+
+function icon(name, size = 14) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.style.flexShrink = '0';
+    svg.style.verticalAlign = 'middle';
+
+    const paths = {
+        // Navigation
+        grid: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
+        code: 'M16 18l6-6-6-6M8 6l-6 6 6 6',
+        list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+        trophy: 'M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM5 4h2M17 4h2',
+        user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+        // Theme
+        sun: 'M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+        moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+        // Actions
+        search: 'M21 21l-4.35-4.35M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0z',
+        chevron: 'M9 18l6-6-6-6',
+    };
+
+    const p = document.createElementNS(svgNS, 'path');
+    p.setAttribute('d', paths[name] || '');
+    svg.appendChild(p);
+    return svg;
+}
+
+
+// ------------------------------------------------------------------
+// Breadcrumb
+// ------------------------------------------------------------------
+
+/**
+ * Build a breadcrumb navigation.
+ * @param {Array<{label: string, href?: string}>} items
+ */
+function breadcrumb(items) {
+    const nav = el('nav', { class: 'breadcrumb', 'aria-label': 'Breadcrumb' });
+    items.forEach((item, idx) => {
+        if (idx > 0) nav.appendChild(el('span', { class: 'sep', text: '/' }));
+        if (item.href) {
+            nav.appendChild(el('a', { href: item.href, text: item.label }));
+        } else {
+            nav.appendChild(el('span', {
+                class: 'current',
+                'aria-current': 'page',
+                text: item.label,
+            }));
+        }
+    });
+    return nav;
+}
+
+
+// ------------------------------------------------------------------
 // Header
 // ------------------------------------------------------------------
 
@@ -196,19 +263,26 @@ function renderHeader(activePage) {
     const user = Auth.getUser();
     const header = el('header', { class: 'app-header' });
 
+    // Brand
     const brand = el('a', { href: 'dashboard.html', class: 'brand', text: 'CodeArena' });
     header.appendChild(brand);
 
+    // Nav with icons
     const nav = el('nav');
     const pages = [
-        { href: 'dashboard.html', label: 'Dashboard', key: 'dashboard' },
-        { href: 'problems.html', label: 'Problems', key: 'problems' },
-        { href: 'history.html', label: 'Submissions', key: 'history' },
-        { href: 'leaderboard.html', label: 'Leaderboard', key: 'leaderboard' },
+        { href: 'dashboard.html', label: 'Dashboard', key: 'dashboard', icon: 'grid' },
+        { href: 'problems.html', label: 'Problems', key: 'problems', icon: 'code' },
+        { href: 'history.html', label: 'Submissions', key: 'history', icon: 'list' },
+        { href: 'leaderboard.html', label: 'Leaderboard', key: 'leaderboard', icon: 'trophy' },
     ];
     for (const p of pages) {
-        const a = el('a', { href: p.href, text: p.label });
-        if (activePage === p.key) a.classList.add('active');
+        const a = el('a', { href: p.href });
+        if (activePage === p.key) {
+            a.classList.add('active');
+            a.setAttribute('aria-current', 'page');
+        }
+        a.appendChild(icon(p.icon));
+        a.appendChild(document.createTextNode(p.label));
         nav.appendChild(a);
     }
     header.appendChild(nav);
@@ -216,26 +290,54 @@ function renderHeader(activePage) {
     if (user) {
         const menu = el('div', { class: 'user-menu' });
 
-        // NEW: Streak Badge
+        // Theme toggle (only if dark mode is implemented)
+        if (typeof currentTheme === 'function' && typeof setTheme === 'function') {
+            const themeBtn = el('button', {
+                class: 'theme-toggle',
+                title: 'Toggle theme',
+                'aria-label': 'Toggle theme',
+                onclick: () => {
+                    const next = currentTheme() === 'dark' ? 'light' : 'dark';
+                    setTheme(next);
+                    // Swap icon
+                    themeBtn.innerHTML = '';
+                    themeBtn.appendChild(icon(next === 'dark' ? 'sun' : 'moon'));
+                },
+            });
+            themeBtn.appendChild(icon(currentTheme() === 'dark' ? 'sun' : 'moon'));
+            menu.appendChild(themeBtn);
+        }
+
+        // Streak badge
         const streakContainer = el('div', {
             id: 'header-streak',
             class: 'streak-badge hidden',
-            title: 'Daily streak'
+            title: 'Daily streak',
         });
         menu.appendChild(streakContainer);
 
-        // Fetch streak asynchronously and update
-        Api.getStreak().then(data => {
-            if (data && data.current_streak > 0) {
-                streakContainer.textContent = `🔥 ${data.current_streak}`;
-                streakContainer.classList.remove('hidden');
-            }
-        }).catch(() => { /* ignore errors, streak is optional */ });
+        if (typeof Api.getStreak === 'function') {
+            Api.getStreak().then(data => {
+                if (data && data.current_streak > 0) {
+                    streakContainer.textContent = `🔥 ${data.current_streak}`;
+                    streakContainer.classList.remove('hidden');
+                }
+            }).catch(() => { /* optional */ });
+        }
 
+        // Avatar link to own profile
         const initial = (user.username || '?').charAt(0).toUpperCase();
-        menu.appendChild(el('div', { class: 'avatar', text: initial }));
+        const avatarLink = el('a', {
+            href: `profile.html?user=${encodeURIComponent(user.username)}`,
+            class: 'avatar',
+            title: 'View your profile',
+            text: initial,
+            style: { textDecoration: 'none' },
+        });
+        menu.appendChild(avatarLink);
         menu.appendChild(el('span', { text: user.username }));
 
+        // Logout
         const logout = el('button', {
             class: 'btn-logout',
             text: 'Logout',

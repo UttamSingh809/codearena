@@ -11,6 +11,11 @@
 
 <body>
     <main class="narrow">
+        <nav class="breadcrumb" id="submission-breadcrumb">
+            <a href="history.html">Submissions</a>
+            <span class="sep">/</span>
+            <span class="current" id="submission-breadcrumb-title">Loading…</span>
+        </nav>
         <div id="submission-view"></div>
     </main>
 
@@ -37,6 +42,8 @@
 
             function render(s) {
                 document.title = `CodeArena — Submission #${s.id}`;
+                const bcTitle = document.getElementById('submission-breadcrumb-title');
+                if (bcTitle) bcTitle.textContent = `#${s.id}`;
                 clear(container);
 
                 const r = s.result;

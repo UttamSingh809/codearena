@@ -11,6 +11,11 @@
 
 <body>
     <main class="problem-layout">
+        <nav class="breadcrumb" id="problem-breadcrumb" style="grid-column: 1 / -1;">
+            <a href="problems.html">Problems</a>
+            <span class="sep">/</span>
+            <span class="current" id="problem-breadcrumb-title">Loading…</span>
+        </nav>
         <!-- ============================================================
          LEFT PANE — Problem statement (scrolls with the page)
          ============================================================ -->
@@ -177,6 +182,9 @@
                 try {
                     const p = await Api.getProblem(problemId);
                     document.title = `CodeArena — ${p.title}`;
+
+                    const bcTitle = document.getElementById('problem-breadcrumb-title');
+                    if (bcTitle) bcTitle.textContent = p.title;
 
                     // Header
                     clear(header);
