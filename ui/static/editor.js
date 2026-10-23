@@ -8,14 +8,28 @@ let changeSubscription = null;
  * Works in a browser without a bundler.
  */
 export async function initMonaco(initialLanguage = "c", initialValue = "") {
-    if (editorInstance) {
-        return editorInstance;
+    const [core, editorWorkerModule] = await Promise.all([
+        import("https://esm.sh/monaco-esm@2.0.1"),
+        import("https://esm.sh/monaco-esm@2.0.1/workers/editor")
+    ]);
+
+    const {
+        monaco,
+        loadCss,
+        initMonaco: configureMonaco
+    } = core;
+
+    const editorWorker = editorWorkerModule.default;
+
+    if (typeof editorWorker !== "function") {
+        throw new Error("Monaco editor worker constructor was not exported correctly.");
     }
 
-    // Import the documented monaco-esm exports.
-    const { monaco, loadCss } = await import(
-        "https://esm.sh/monaco-esm"
-    );
+    configureMonaco({
+        workers: {
+            editor: editorWorker
+        }
+    });
 
     loadCss();
 
@@ -190,4 +204,13 @@ export function disposeEditor() {
     }
 
     monacoInstance = null;
+}
+
+/**
+ * Change the Monaco editor theme.
+ * Uses 'vs-dark' for dark mode and 'vs' for light mode.
+ */
+export function setEditorTheme(theme) {
+    if (!editorInstance || !monacoInstance) return;
+    monacoInstance.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
 }
