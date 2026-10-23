@@ -36,6 +36,89 @@ function toast(message, type = 'info', durationMs = 4000) {
 }
 
 // ------------------------------------------------------------------
+// Theme management
+// ------------------------------------------------------------------
+
+const THEME_KEY = 'codearena_theme';
+const THEME_LIGHT = 'light';
+const THEME_DARK = 'dark';
+
+/**
+ * Return the currently applied theme ('light' or 'dark').
+ */
+function currentTheme() {
+    return document.documentElement.dataset.theme || THEME_LIGHT;
+}
+
+/**
+ * Apply a theme and persist it.
+ */
+function setTheme(theme) {
+    if (theme !== THEME_LIGHT && theme !== THEME_DARK) {
+        theme = THEME_LIGHT;
+    }
+    document.documentElement.dataset.theme = theme;
+    try {
+        localStorage.setItem(THEME_KEY, theme);
+    } catch (err) {
+        // localStorage can fail in private browsing — fall back to memory
+        console.warn('Could not persist theme:', err);
+    }
+    // Update meta theme-color if present (used by mobile browsers)
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+        meta.setAttribute('content', theme === THEME_DARK ? '#1a1114' : '#FBEDE8');
+    }
+}
+
+/**
+ * Apply the saved theme immediately at load time.
+ * Called automatically when this script runs.
+ *
+ * Priority:
+ *   1. Explicit user choice (localStorage)
+ *   2. OS preference (prefers-color-scheme)
+ *   3. Fallback to light
+ */
+(function applyInitialTheme() {
+    let theme = null;
+
+    try {
+        theme = localStorage.getItem(THEME_KEY);
+    } catch (err) {
+        // Private browsing or disabled storage
+    }
+
+    if (theme !== THEME_LIGHT && theme !== THEME_DARK) {
+        if (window.matchMedia) {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? THEME_DARK
+                : THEME_LIGHT;
+        } else {
+            theme = THEME_LIGHT;
+        }
+    }
+
+    document.documentElement.dataset.theme = theme;
+
+    // If the OS theme changes and the user has NOT set an explicit
+    // preference, follow the OS.
+    if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        const onChange = (e) => {
+            let stored = null;
+            try { stored = localStorage.getItem(THEME_KEY); } catch (_) { }
+            if (!stored) {
+                document.documentElement.dataset.theme =
+                    e.matches ? THEME_DARK : THEME_LIGHT;
+            }
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        else if (mq.addListener) mq.addListener(onChange);
+    }
+})();
+
+// ------------------------------------------------------------------
 // Auth storage
 // ------------------------------------------------------------------
 

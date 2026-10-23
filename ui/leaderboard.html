@@ -3,7 +3,25 @@
 
 <head>
     <meta charset="utf-8">
+    <script>
+        // Apply theme immediately to prevent flash of wrong theme
+        (function () {
+            try {
+                var theme = localStorage.getItem('codearena_theme');
+                if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia
+                        && window.matchMedia('(prefers-color-scheme: dark)').matches
+                        ? 'dark'
+                        : 'light';
+                }
+                document.documentElement.dataset.theme = theme;
+            } catch (e) {
+                document.documentElement.dataset.theme = 'light';
+            }
+        })();
+    </script>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#FBEDE8">
     <title>CodeArena — Leaderboard</title>
     <link rel="stylesheet" href="static/style.css">
 </head>

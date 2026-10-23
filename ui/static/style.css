@@ -1,49 +1,109 @@
 /* ============================================================
- * CodeArena — UI styles
- * Design system: Dating Blush
+ * Theme: Light (default) — Dating Blush
  * ============================================================ */
-
-:root {
-    /* Colors — Dating Blush */
+:root,
+:root[data-theme="light"] {
+    /* Core colors */
     --primary: #2B1014;
-    /* headings, core text */
     --secondary: #936668;
-    /* borders, captions, meta */
     --tertiary: #E84B55;
-    /* THE accent — interaction only */
     --neutral: #FBEDE8;
-    /* page foundation */
     --surface: #FFFFFF;
-    /* cards */
     --on-primary: #FFFFFF;
-    /* Derived tints — flat, no gradients */
     --tertiary-hi: #f26a73;
-    /* hover lift on tertiary */
     --tertiary-dim: rgba(232, 75, 85, 0.12);
-    /* tertiary wash for badges */
     --neutral-deep: #f3ded6;
-    /* recessed / input backgrounds */
-    /* Semantic — kept muted so tertiary stays the only loud color */
+
+    /* Semantic */
     --success: #2f7d4f;
     --success-bg: #e6f2ea;
     --warning: #9a6a1c;
     --warning-bg: #f8eeda;
     --danger: #b3352e;
     --danger-bg: #fbe4e2;
+
+    /* Medals */
     --gold: #c9a227;
     --silver: #9aa3ad;
     --bronze: #a86b34;
-    /* Radii — Dating Blush scale */
+
+    /* Radii */
     --radius-sm: 14px;
     --radius: 22px;
     --radius-lg: 34px;
-    /* Shadows — soft, warm, flat */
+
+    /* Shadows — warm, light */
     --shadow-1: 0 1px 2px rgba(43, 16, 20, 0.06);
     --shadow-2: 0 4px 14px rgba(43, 16, 20, 0.08);
     --shadow-3: 0 12px 32px rgba(43, 16, 20, 0.12);
+
+    /* Fonts */
     --font-serif: "DM Serif Display", Georgia, serif;
-    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    --font-mono: "SF Mono", "JetBrains Mono", "Fira Code", Monaco, "Cascadia Code", monospace;
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SF Mono", "JetBrains Mono", "Fira Code",
+        Monaco, "Cascadia Code", monospace;
+
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+    --space-12: 48px;
+    --space-16: 64px;
+
+    /* Type scale */
+    --text-xs: 0.72rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.5rem;
+    --text-2xl: 1.7rem;
+    --text-3xl: 2.4rem;
+}
+
+/* ============================================================
+ * Theme: Dark — Dating Blush at night
+ *
+ * Warm dark colors that preserve the blush hue. The primary
+ * text becomes the light neutral, and the surface becomes a
+ * deep plum-brown instead of the default near-black.
+ * ============================================================ */
+:root[data-theme="dark"] {
+    --primary: #FBEDE8;
+    --secondary: #b08f8c;
+    --tertiary: #E84B55;
+    /* accent stays the same */
+    --neutral: #1a1114;
+    /* page background */
+    --surface: #23181c;
+    /* cards, inputs */
+    --on-primary: #1a1114;
+    /* text on tertiary buttons */
+    --tertiary-hi: #f26a73;
+    --tertiary-dim: rgba(232, 75, 85, 0.18);
+    --neutral-deep: #2d2025;
+    /* recessed / borders */
+
+    --success: #5fd68e;
+    --success-bg: rgba(95, 214, 142, 0.12);
+    --warning: #f0c060;
+    --warning-bg: rgba(240, 192, 96, 0.12);
+    --danger: #ff7b72;
+    --danger-bg: rgba(255, 123, 114, 0.12);
+
+    --gold: #d4b44a;
+    --silver: #a8b3c1;
+    --bronze: #c08a4d;
+
+    /* Shadows are much stronger on dark backgrounds */
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.5);
+    --shadow-3: 0 12px 32px rgba(0, 0, 0, 0.6);
 }
 
 
@@ -90,10 +150,14 @@ button {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: rgba(251, 237, 232, 0.88);
+
+    /* Use --neutral to match the page background */
+    background: color-mix(in srgb, var(--neutral) 88%, transparent);
+
     backdrop-filter: saturate(180%) blur(12px);
     -webkit-backdrop-filter: saturate(180%) blur(12px);
-    border-bottom: 1px solid var(--secondary);
+
+    border-bottom: 1px solid var(--neutral-deep);
     height: 68px;
     display: flex;
     align-items: center;
@@ -2082,4 +2146,35 @@ main.problem-layout {
 .app-header .user-menu a.avatar:hover {
     transform: scale(1.06);
     box-shadow: 0 0 0 2px var(--tertiary);
+}
+
+/* ============================================================
+ * Theme toggle
+ * ============================================================ */
+
+.theme-toggle {
+    background: transparent;
+    border: 1px solid var(--neutral-deep);
+    color: var(--secondary);
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+    color: var(--primary);
+    border-color: var(--secondary);
+    background: var(--neutral-deep);
+}
+
+.theme-toggle:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
 }
