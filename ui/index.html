@@ -88,6 +88,9 @@
         'use strict';
 
         (function () {
+            if (new URLSearchParams(location.search).get('expired')) {
+                toast('Your session expired. Please log in again.', 'warn');
+            }
             if (Auth.isLoggedIn()) { location.href = 'dashboard.html'; return; }
 
             const loginTab = document.getElementById('tab-login');
@@ -123,7 +126,17 @@
                     Auth.saveToken(r.access_token, r.user);
                     location.href = 'dashboard.html';
                 } catch (err) {
-                    toast(err.message || 'Login failed', 'error');
+                    console.error('Login failed:', err);
+                    if (err instanceof ApiError && err.isValidation) {
+                        toast('Please check your inputs.', 'error');
+                    } else {
+                        toast(
+                            err instanceof ApiError && err.isAuth
+                                ? 'Invalid email or password.'
+                                : friendlyErrorMessage(err, 'Login failed'),
+                            'error'
+                        );
+                    }
                     btn.disabled = false;
                     btn.textContent = 'Sign in';
                 }
@@ -142,11 +155,25 @@
                     Auth.saveToken(r.access_token, r.user);
                     location.href = 'dashboard.html';
                 } catch (err) {
-                    toast(err.message || 'Registration failed', 'error');
+                    console.error('Registration failed:', err);
+                    if (err instanceof ApiError && err.isValidation) {
+                        toast('Please check your inputs.', 'error');
+                    } else if (err instanceof ApiError && err.isConflict) {
+                        showFieldError(document.getElementById('reg-username'), 'Username may be taken');
+                        showFieldError(document.getElementById('reg-email'), 'Email may be taken');
+                    } else {
+                        toast(friendlyErrorMessage(err, 'Registration failed'), 'error');
+                    }
                     btn.disabled = false;
                     btn.textContent = 'Create account';
                 }
             });
+
+            ['login-email', 'login-password', 'reg-username', 'reg-email', 'reg-password']
+                .forEach(id => {
+                    const input = document.getElementById(id);
+                    input.addEventListener('input', () => clearFieldError(input));
+                });
         })();
     </script>
 </body>

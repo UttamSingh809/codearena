@@ -2363,3 +2363,47 @@ textarea:focus-visible {
 body.no-sticky-header .app-header {
     position: static;
 }
+
+/* ============================================================
+ * Connection banner
+ * ============================================================ */
+
+.connection-banner {
+    position: fixed;
+    bottom: var(--space-6);
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface);
+    border: 1px solid var(--warning);
+    color: var(--primary);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-3);
+    font-size: var(--text-sm);
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+    text-align: center;
+}
+
+.connection-banner.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.connection-banner.hidden {
+    display: none;
+}
+
+.field-error {
+    color: var(--danger);
+    font-size: var(--text-xs);
+    margin-top: var(--space-1);
+    display: block;
+}
+
+input.invalid,
+textarea.invalid {
+    border-color: var(--danger);
+}

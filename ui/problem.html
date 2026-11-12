@@ -73,6 +73,7 @@
                     <textarea id="source" placeholder="Write your solution here…" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
                     <div class="editor-status">
                         <span id="char-count" class="muted">0 / 65536</span>
+                        <span id="save-status" class="muted" aria-live="polite"></span>
                         <span id="submit-status" class="muted" aria-live="polite"></span>
                     </div>
                 </div>
@@ -111,6 +112,7 @@
             const clearBtn = document.getElementById('clear-btn');
             const submitStat = document.getElementById('submit-status');
             const charCount = document.getElementById('char-count');
+            const saveStatus = document.getElementById('save-status');
             const resultCard = document.getElementById('result-card');
             const resultBody = document.getElementById('result-body');
             const viewFull = document.getElementById('view-full');
@@ -130,17 +132,47 @@
             });
 
             const draftKey = 'codearena_source_' + problemId;
-            source.value = localStorage.getItem(draftKey) || '';
-            updateCharCount();
+            const savedDraft = localStorage.getItem(draftKey);
+            source.value = savedDraft || '';
+            updateCharCount(source.value);
+            if (savedDraft !== null) updateSaveStatus(navigator.onLine ? 'saved' : 'offline');
 
             let draftTimer = null;
-            source.addEventListener('input', () => {
-                updateCharCount();
-                // Debounce the localStorage write so we don't hammer it on every keystroke
+            let draftSaved = savedDraft !== null;
+
+            function persistDraft(value, state) {
+                try {
+                    localStorage.setItem(draftKey, value);
+                    draftSaved = true;
+                    updateSaveStatus(state || (navigator.onLine ? 'saved' : 'offline'));
+                } catch (err) {
+                    draftSaved = false;
+                    updateSaveStatus('error');
+                    console.error('Could not save code draft:', err);
+                }
+            }
+
+            function scheduleDraftSave(value) {
+                updateSaveStatus('saving');
                 if (draftTimer) clearTimeout(draftTimer);
                 draftTimer = setTimeout(() => {
-                    localStorage.setItem(draftKey, source.value);
+                    draftTimer = null;
+                    persistDraft(value);
                 }, 300);
+            }
+
+            source.addEventListener('input', () => {
+                updateCharCount(source.value);
+                scheduleDraftSave(source.value);
+            });
+
+            window.addEventListener('offline', () => {
+                if (draftTimer) clearTimeout(draftTimer);
+                draftTimer = null;
+                persistDraft(source.value, 'offline');
+            });
+            window.addEventListener('online', () => {
+                if (draftSaved && !draftTimer) updateSaveStatus('saved');
             });
 
             // Tab key inserts 4 spaces instead of moving focus
@@ -151,19 +183,36 @@
                     const end = source.selectionEnd;
                     source.value = source.value.slice(0, start) + '    ' + source.value.slice(end);
                     source.selectionStart = source.selectionEnd = start + 4;
-                    updateCharCount();
+                    updateCharCount(source.value);
+                    scheduleDraftSave(source.value);
                 }
             });
 
-            function updateCharCount() {
-                charCount.textContent = `${source.value.length} / 65536`;
+            function updateCharCount(value = source.value) {
+                charCount.textContent = `${value.length} / 65536`;
+            }
+
+            function updateSaveStatus(state) {
+                const states = {
+                    saving: ['Saving…', 'var(--secondary)'],
+                    saved: ['Saved', 'var(--success)'],
+                    offline: ['Saved offline', 'var(--warning)'],
+                    error: ['Could not save draft', 'var(--danger)'],
+                };
+                const [text, color] = states[state] || ['', ''];
+                saveStatus.textContent = text;
+                saveStatus.style.color = color;
             }
 
             clearBtn.addEventListener('click', () => {
                 if (source.value && !confirm('Clear the editor?')) return;
                 source.value = '';
                 localStorage.removeItem(draftKey);
+                if (draftTimer) clearTimeout(draftTimer);
+                draftTimer = null;
+                draftSaved = false;
                 updateCharCount();
+                updateSaveStatus('');
             });
 
             // ---- Load the problem -------------------------------------------
@@ -231,11 +280,13 @@
                     if (p.output_format) statement.appendChild(renderSection('Output', p.output_format));
                     if (p.constraints) statement.appendChild(renderSection('Constraints', p.constraints));
                 } catch (err) {
+                    const message = friendlyErrorMessage(err, 'Failed to load problem');
                     clear(header);
                     header.appendChild(el('p', {
-                        text: err.message || 'Failed to load problem'
+                        text: message
                     }));
-                    toast(err.message || 'Failed to load problem', 'error');
+                    console.error('Failed to load problem:', err);
+                    toast(message, 'error');
                 }
             })();
 
@@ -256,6 +307,10 @@
             // ---- Submit ------------------------------------------------------
 
             submitBtn.addEventListener('click', async() => {
+                if (!navigator.onLine) {
+                    toast('You are offline. Please reconnect to submit.', 'warn');
+                    return;
+                }
                 if (!source.value.trim()) {
                     toast('Source code is empty', 'warn');
                     source.focus();
@@ -275,7 +330,8 @@
                     toast(`Submission #${r.id} created`, 'success');
                     showResult(r.id);
                 } catch (err) {
-                    toast(err.message || 'Submit failed', 'error');
+                    console.error('Submission failed:', err);
+                    toast(friendlyErrorMessage(err, 'Submit failed'), 'error');
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Submit';
                     submitStat.textContent = '';
@@ -294,8 +350,10 @@
                     });
                 }
 
+                let lastPollError = null;
                 const stop = poll(async() => {
                     const s = await Api.getSubmission(subId);
+                    lastPollError = null;
                     renderResult(s);
                     if (["COMPLETED", "FAILED", "CANCELLED"].includes(s.status)) {
                         submitBtn.disabled = false;
@@ -310,7 +368,12 @@
                         return true;
                     }
                     return false;
-                }, 1500);
+                }, 1500, err => {
+                    console.error('Could not refresh submission:', err);
+                    const message = friendlyErrorMessage(err, 'Could not refresh submission');
+                    if (message !== lastPollError) toast(message, 'error');
+                    lastPollError = message;
+                });
 
                 window.addEventListener('beforeunload', () => stop());
             }

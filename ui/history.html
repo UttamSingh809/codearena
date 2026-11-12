@@ -132,8 +132,10 @@
                     render();
                 } catch (err) {
                     clear(container);
-                    emptyState(container, 'Failed to load', err.message || 'Unknown error');
-                    toast(err.message || 'Failed to load history', 'error');
+                    const message = friendlyErrorMessage(err, 'Failed to load history');
+                    emptyState(container, 'Failed to load', message);
+                    console.error('Failed to load history:', err);
+                    toast(message, 'error');
                 }
             })();
         })();

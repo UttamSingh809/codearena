@@ -333,11 +333,18 @@
             container.appendChild(Skeleton.submissionPage());
 
             // Initial fetch + polling
+            let lastPollError = null;
             stopFn = poll(async() => {
                 const s = await Api.getSubmission(subId);
+                lastPollError = null;
                 render(s); // render() clears the container, removing the skeleton
                 return ['COMPLETED', 'FAILED', 'CANCELLED'].includes(s.status);
-            }, 1500);
+            }, 1500, err => {
+                console.error('Could not load submission:', err);
+                const message = friendlyErrorMessage(err, 'Could not load submission');
+                if (message !== lastPollError) toast(message, 'error');
+                lastPollError = message;
+            });
 
             window.addEventListener('beforeunload', () => stopFn && stopFn());
         })();

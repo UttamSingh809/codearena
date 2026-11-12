@@ -186,10 +186,8 @@
                     container.appendChild(table);
 
                 } catch (err) {
-                    toast(
-                        err.message || 'Failed to load dashboard',
-                        'error'
-                    );
+                    console.error('Failed to load dashboard:', err);
+                    toast(friendlyErrorMessage(err, 'Failed to load dashboard'), 'error');
                 }
             })();
 
@@ -238,7 +236,7 @@
                 let data;
 
                 try {
-                    data = await apiFetch(
+                    data = await apiFetchWithRetry(
                         '/api/stats/heatmap?days=365'
                     );
                 } catch (err) {
@@ -247,7 +245,7 @@
                     container.appendChild(
                         el('div', { class: 'empty' }, [
                             el('p', {
-                                text: 'Could not load submission activity.'
+                                text: friendlyErrorMessage(err, 'Could not load submission activity.')
                             })
                         ])
                     );

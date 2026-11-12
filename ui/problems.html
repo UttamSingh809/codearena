@@ -114,10 +114,12 @@
                     render();
                 } catch (err) {
                     clear(container);
+                    const message = friendlyErrorMessage(err, 'Failed to load problems');
                     container.appendChild(el('div', { class: 'card' }, [
-                        el('p', { text: err.message || 'Failed to load problems' }),
+                        el('p', { text: message }),
                     ]));
-                    toast(err.message || 'Failed to load problems', 'error');
+                    console.error('Failed to load problems:', err);
+                    toast(message, 'error');
                 }
             })();
         })();

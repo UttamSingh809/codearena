@@ -156,10 +156,31 @@ const Auth = {
 // ------------------------------------------------------------------
 
 class ApiError extends Error {
-    constructor(status, detail) {
+    constructor(status, detail, code = null) {
         super(typeof detail === 'string' ? detail : JSON.stringify(detail));
+        this.name = 'ApiError';
         this.status = status;
         this.detail = detail;
+        this.code = code;
+    }
+
+    get isNetwork() { return this.status === 0; }
+    get isAuth() { return this.status === 401; }
+    get isForbidden() { return this.status === 403; }
+    get isNotFound() { return this.status === 404; }
+    get isConflict() { return this.status === 409; }
+    get isValidation() { return this.status === 422; }
+    get isServer() { return this.status >= 500; }
+
+    friendlyMessage() {
+        if (this.isNetwork) return 'Cannot reach the server. Check your connection.';
+        if (this.isAuth) return 'Your session has expired. Please log in again.';
+        if (this.isForbidden) return "You don't have permission to do that.";
+        if (this.isNotFound) return 'That resource no longer exists.';
+        if (this.isConflict) return 'That action conflicts with existing data.';
+        if (this.isValidation) return 'Some fields are invalid. Please review them.';
+        if (this.isServer) return 'The server had a problem. Try again in a moment.';
+        return this.message || 'Something went wrong.';
     }
 }
 
@@ -175,6 +196,7 @@ async function apiFetch(path, options = {}) {
     try {
         resp = await fetch(API_BASE + path, Object.assign({}, options, { headers }));
     } catch (e) {
+        if (e.name === 'AbortError') throw e;
         throw new ApiError(0, `Network error: ${e.message}`);
     }
 
@@ -185,6 +207,14 @@ async function apiFetch(path, options = {}) {
     }
 
     if (!resp.ok) {
+        if (resp.status === 401) {
+            const hadSession = !!token;
+            Auth.clear();
+            if (hadSession && !location.pathname.endsWith('index.html')) {
+                location.href = 'index.html?expired=1';
+                throw new ApiError(401, 'Session expired');
+            }
+        }
         const detail = body && body.detail ? body.detail : resp.statusText;
         throw new ApiError(resp.status, detail);
     }
@@ -192,22 +222,43 @@ async function apiFetch(path, options = {}) {
     return body;
 }
 
+async function apiFetchWithRetry(path, options = {}, maxRetries = 2) {
+    let lastError;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await apiFetch(path, options);
+        } catch (err) {
+            lastError = err;
+            if (!(err instanceof ApiError) || !err.isNetwork) throw err;
+            if ((options.method || 'GET').toUpperCase() !== 'GET') throw err;
+            if (attempt < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+            }
+        }
+    }
+    throw lastError;
+}
+
+function friendlyErrorMessage(err, fallback = 'Something went wrong.') {
+    return err instanceof ApiError ? err.friendlyMessage() : (err.message || fallback);
+}
+
 const Api = {
     register: (u, e, p) => apiFetch('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: u, email: e, password: p }) }),
     login: (e, p) => apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: e, password: p }) }),
-    me: () => apiFetch('/api/auth/me'),
-    listProblems: () => apiFetch('/api/problems'),
-    getProblem: (id) => apiFetch(`/api/problems/${id}`),
+    me: () => apiFetchWithRetry('/api/auth/me'),
+    listProblems: () => apiFetchWithRetry('/api/problems'),
+    getProblem: (id) => apiFetchWithRetry(`/api/problems/${id}`),
     submit: (pid, l, code) => apiFetch('/api/submissions', {
         method: 'POST',
         body: JSON.stringify({ problem_id: pid, language: l, source_code: code }),
     }),
-    getSubmission: (id) => apiFetch(`/api/submissions/${id}`),
+    getSubmission: (id) => apiFetchWithRetry(`/api/submissions/${id}`),
     listSubmissions: (limit = 50, offset = 0) =>
-        apiFetch(`/api/submissions?limit=${limit}&offset=${offset}`),
+        apiFetchWithRetry(`/api/submissions?limit=${limit}&offset=${offset}`),
     leaderboard: (limit = 50, offset = 0) =>
-        apiFetch(`/api/leaderboard?limit=${limit}&offset=${offset}`),
-    getStreak: () => apiFetch('/api/stats/streak'),
+        apiFetchWithRetry(`/api/leaderboard?limit=${limit}&offset=${offset}`),
+    getStreak: () => apiFetchWithRetry('/api/stats/streak'),
 };
 
 // ------------------------------------------------------------------
@@ -232,6 +283,33 @@ function el(tag, attrs = {}, children = []) {
         else node.appendChild(child);
     }
     return node;
+}
+
+function showFieldError(inputEl, message) {
+    const field = inputEl.closest('.field');
+    if (!field) return;
+    let error = field.querySelector('.field-error');
+    if (!error) {
+        error = document.createElement('span');
+        error.className = 'field-error';
+        error.id = `${inputEl.id}-error`;
+        error.setAttribute('aria-live', 'polite');
+        field.appendChild(error);
+    }
+    error.textContent = message;
+    inputEl.classList.add('invalid');
+    inputEl.setAttribute('aria-invalid', 'true');
+    inputEl.setAttribute('aria-describedby', error.id);
+}
+
+function clearFieldError(inputEl) {
+    const field = inputEl.closest('.field');
+    if (!field) return;
+    const error = field.querySelector('.field-error');
+    if (error) error.remove();
+    inputEl.classList.remove('invalid');
+    inputEl.removeAttribute('aria-invalid');
+    inputEl.removeAttribute('aria-describedby');
 }
 
 function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
@@ -462,13 +540,18 @@ function requireAuth(activePage) {
 // Polling
 // ------------------------------------------------------------------
 
-function poll(fn, intervalMs = 2000) {
+function poll(fn, intervalMs = 2000, onError = null) {
     let stopped = false;
     let timer = null;
     async function tick() {
         if (stopped) return;
         let cont = false;
-        try { cont = await fn(); } catch (e) { console.error('poll error', e); }
+        try {
+            cont = await fn();
+        } catch (e) {
+            if (onError) onError(e);
+            else console.error('poll error', e);
+        }
         if (!stopped && cont !== true) timer = setTimeout(tick, intervalMs);
         else stopped = true;
     }
@@ -730,6 +813,54 @@ function emptyState(container, title, subtitle) {
         subtitle && el('p', { text: subtitle }),
     ]));
 }
+
+// ------------------------------------------------------------------
+// Offline & reconnect states
+// ------------------------------------------------------------------
+
+(function connectionMonitor() {
+    let hideTimer = null;
+
+    function ensureBanner() {
+        let banner = document.getElementById('connection-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'connection-banner';
+            banner.className = 'connection-banner hidden';
+            banner.setAttribute('role', 'status');
+            banner.setAttribute('aria-live', 'polite');
+            document.body.appendChild(banner);
+        }
+        return banner;
+    }
+
+    function showOffline() {
+        clearTimeout(hideTimer);
+        const banner = ensureBanner();
+        banner.textContent = '⚠ You are offline. Your work is saved locally.';
+        banner.classList.remove('hidden');
+        void banner.offsetWidth;
+        banner.classList.add('visible');
+    }
+
+    function showOnline() {
+        const banner = ensureBanner();
+        banner.textContent = '✓ Back online.';
+        banner.classList.remove('hidden');
+        void banner.offsetWidth;
+        banner.classList.add('visible');
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => {
+            banner.classList.remove('visible');
+            hideTimer = setTimeout(() => banner.classList.add('hidden'), 300);
+        }, 3000);
+    }
+
+    window.addEventListener('offline', showOffline);
+    window.addEventListener('online', showOnline);
+
+    if (!navigator.onLine) showOffline();
+})();
 // ------------------------------------------------------------------
 // Verdict display helpers
 // ------------------------------------------------------------------

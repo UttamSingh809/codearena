@@ -119,8 +119,10 @@
                         class: 'table-wrap'
                     }, [table]));
                 } catch (err) {
-                    emptyState(container, 'Failed to load', err.message || 'Unknown error');
-                    toast(err.message || 'Failed to load leaderboard', 'error');
+                    const message = friendlyErrorMessage(err, 'Failed to load leaderboard');
+                    emptyState(container, 'Failed to load', message);
+                    console.error('Failed to load leaderboard:', err);
+                    toast(message, 'error');
                 }
             })();
         })();
