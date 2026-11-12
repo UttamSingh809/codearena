@@ -244,8 +244,8 @@
 
                 // Stats grid
                 const statsGrid = el('div', { class: 'card-grid mb-24' }, [
+                    statCard('Level', `Lvl ${profile.level || 1}`, `${profile.xp || 0} XP earned`),
                     statCard('Global Rank', profile.rank ? `#${profile.rank}` : '—', 'across all users'),
-                    statCard('Score', profile.total_score, 'total points'),
                     statCard('Solved', profile.total_solved, 'problems with AC'),
                     statCard('Submissions', profile.total_submissions, 'all time'),
                 ]);

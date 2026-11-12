@@ -52,6 +52,8 @@ class UserPublic(BaseModel):
     last_login_at: Optional[datetime] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
+    xp: int = 0
+    level: int = 1
 
 
 class UpdateProfileRequest(BaseModel):

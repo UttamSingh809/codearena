@@ -8,6 +8,8 @@ from .. import db
 from ..deps import CurrentUser, get_current_user
 from ..models import UpdateProfileRequest
 
+import math
+
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
@@ -26,7 +28,7 @@ async def get_public_profile(
     """
     target = await db.fetch_one(
         """
-        SELECT id, username, role, created_at, bio, avatar_url
+        SELECT id, username, role, created_at, bio, avatar_url, xp
         FROM users
         WHERE username = $1
         """,
@@ -67,6 +69,10 @@ async def get_public_profile(
         target["id"],
     )
 
+    # Calculate level from XP
+    xp = target["xp"]
+    level = int(math.isqrt(xp // 100)) + 1
+
     return {
         "id": target["id"],
         "username": target["username"],
@@ -74,6 +80,8 @@ async def get_public_profile(
         "joined_at": target["created_at"],
         "bio": target["bio"],
         "avatar_url": target["avatar_url"],
+        "xp": xp,
+        "level": level,
         "rank": rank_row["rank"] if rank_row else None,
         "total_score": stats["total_score"],
         "total_solved": stats["total_solved"],

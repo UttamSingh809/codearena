@@ -3,6 +3,7 @@
 """
 
 import logging
+import math
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -133,15 +134,15 @@ async def login(req: LoginRequest) -> TokenResponse:
 
 @router.get("/me", response_model=UserPublic)
 async def me(user: CurrentUser = Depends(get_current_user)) -> UserPublic:
-    """Return the authenticated user's profile."""
     row = await db.fetch_one(
-        """
-        SELECT id, username, email, role, created_at, last_login_at,
-               bio, avatar_url
-        FROM users WHERE id = $1
-        """,
+        "SELECT id, username, email, role, created_at, last_login_at, bio, avatar_url, xp FROM users WHERE id = $1",
         user.id,
     )
-    if row is None:
-        raise HTTPException(status_code=404, detail="user not found")
-    return UserPublic(**dict(row))
+    if row is None: raise HTTPException(status_code=404, detail="user not found")
+    
+    xp = row["xp"]
+    level = int(math.isqrt(xp // 100)) + 1
+    
+    user_data = dict(row)
+    user_data["level"] = level
+    return UserPublic(**user_data)

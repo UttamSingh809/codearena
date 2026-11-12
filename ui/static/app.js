@@ -490,6 +490,30 @@ function renderHeader(activePage) {
     if (user) {
         const menu = el('div', { class: 'user-menu' });
 
+        // ---- NEW: XP & Level ----
+        const level = user.level || 1;
+        const xp = user.xp || 0;
+
+        // Calculate XP needed for next level
+        // Level 1 = 0, Level 2 = 100, Level 3 = 400, Level 4 = 900...
+        const nextLevel = level + 1;
+        const currentLevelBase = Math.pow(level - 1, 2) * 100;
+        const nextLevelBase = Math.pow(nextLevel - 1, 2) * 100;
+        const xpForNext = nextLevelBase - currentLevelBase;
+        const xpInCurrent = xp - currentLevelBase;
+        const progressPct = Math.min(100, Math.max(0, Math.round((xpInCurrent / xpForNext) * 100)));
+
+        const xpWidget = el('div', {
+            class: 'xp-widget',
+            title: `${xp} XP · Level ${level}`
+        }, [
+            el('div', { class: 'xp-level', text: `Lvl ${level}` }),
+            el('div', { class: 'xp-bar-bg' }, [
+                el('div', { class: 'xp-bar-fill', style: { width: `${progressPct}%` } })
+            ])
+        ]);
+        menu.appendChild(xpWidget);
+
         // Theme toggle (only if dark mode is implemented)
         if (typeof currentTheme === 'function' && typeof setTheme === 'function') {
             const themeBtn = el('button', {

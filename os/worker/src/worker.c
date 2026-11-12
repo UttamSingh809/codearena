@@ -216,7 +216,7 @@ static int commit_result(worker_t *w, uint64_t submission_id,
     char sid[32];
     snprintf(sid, sizeof(sid), "%llu", (unsigned long long)submission_id);
     const char *lock_sql =
-        "SELECT status FROM submissions WHERE id = $1 FOR UPDATE";
+        "SELECT status, user_id, problem_id FROM submissions WHERE id = $1 FOR UPDATE";
     const char *lock_params[1] = { sid };
 
     db_result_t *lr = db_exec(w->db, lock_sql, 1, lock_params);
@@ -235,6 +235,11 @@ static int commit_result(worker_t *w, uint64_t submission_id,
         db_rollback(w->db);
         return -1;
     }
+
+    /* NEW: Extract user_id and problem_id while the row is still locked */
+    uint64_t user_id = (uint64_t)db_result_get_int64(lr, 0, 1);
+    uint64_t problem_id = (uint64_t)db_result_get_int64(lr, 0, 2);
+
     db_result_free(lr);
 
     /* Step 2: insert result */
@@ -292,6 +297,67 @@ static int commit_result(worker_t *w, uint64_t submission_id,
         return -1;
     }
     db_result_free(ur);
+    
+
+    /* Step 3b: Award XP if the verdict is AC and this is the first AC for this problem. */
+    if (strcmp(g->verdict, "AC") == 0)
+    {
+        // Check if there are any other ACs for this user+problem
+        char user_id_buf[24], problem_id_buf[24];
+        snprintf(user_id_buf, sizeof(user_id_buf), "%llu", (unsigned long long)user_id);
+        snprintf(problem_id_buf, sizeof(problem_id_buf), "%llu", (unsigned long long)problem_id);
+
+        const char *check_sql =
+            "SELECT COUNT(*) FROM results r "
+            "JOIN submissions s ON s.id = r.submission_id "
+            "WHERE s.user_id = $1 AND s.problem_id = $2 AND r.verdict = 'AC' AND s.id != $3";
+
+        const char *check_params[3] = {user_id_buf, problem_id_buf, sid};
+        db_result_t *cr = db_exec(w->db, check_sql, 3, check_params);
+
+        if (cr)
+        {
+            int64_t previous_acs = db_result_get_int64(cr, 0, 0);
+            db_result_free(cr);
+
+            if (previous_acs == 0)
+            {
+                // This is the first AC for this user+problem. Award XP.
+                // We need the problem's difficulty to calculate XP.
+                const char *diff_sql = "SELECT difficulty FROM problems WHERE id = $1";
+                const char *diff_params[1] = {problem_id_buf};
+                db_result_t *dr = db_exec(w->db, diff_sql, 1, diff_params);
+
+                if (dr && db_result_rows(dr) > 0)
+                {
+                    const char *difficulty = db_result_get(dr, 0, 0);
+                    int xp_to_award = 0;
+
+                    if (difficulty)
+                    {
+                        if (strcmp(difficulty, "easy") == 0)
+                            xp_to_award = 10;
+                        else if (strcmp(difficulty, "medium") == 0)
+                            xp_to_award = 30;
+                        else if (difficulty == "hard" || strcmp(difficulty, "hard") == 0)
+                            xp_to_award = 60;
+                    }
+                    db_result_free(dr);
+
+                    if (xp_to_award > 0)
+                    {
+                        char xp_buf[16];
+                        snprintf(xp_buf, sizeof(xp_buf), "%d", xp_to_award);
+                        const char *xp_sql = "UPDATE users SET xp = xp + $1 WHERE id = $2";
+                        const char *xp_params[2] = {xp_buf, user_id_buf};
+                        db_result_t *xr = db_exec(w->db, xp_sql, 2, xp_params);
+                        if (xr)
+                            db_result_free(xr);
+                    }
+                }
+            }
+        }
+    }
 
     if (db_commit(w->db) < 0) {
         fprintf(stderr, "worker[%s]: COMMIT failed: %s\n",

@@ -2890,3 +2890,42 @@ a.onboarding-step:hover {
     background: var(--tertiary);
     transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* ============================================================
+ * XP Widget in Header
+ * ============================================================ */
+
+.xp-widget {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--neutral-deep);
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: help;
+}
+
+.xp-level {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--tertiary);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.xp-bar-bg {
+    width: 40px;
+    height: 6px;
+    background: var(--surface);
+    border-radius: 3px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.xp-bar-fill {
+    height: 100%;
+    background: var(--tertiary);
+    border-radius: 3px;
+    transition: width 0.4s ease-out;
+}
