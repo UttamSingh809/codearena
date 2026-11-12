@@ -383,6 +383,8 @@ function icon(name, size = 14) {
         // Actions
         search: 'M21 21l-4.35-4.35M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0z',
         chevron: 'M9 18l6-6-6-6',
+        check: 'M20 6L9 17l-5-5',
+        close: 'M18 6L6 18M6 6l12 12',
     };
 
     const p = document.createElementNS(svgNS, 'path');

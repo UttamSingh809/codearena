@@ -2737,3 +2737,156 @@ kbd {
     color: var(--secondary);
     font-size: var(--text-sm);
 }
+
+/* ============================================================
+ * Onboarding checklist
+ * ============================================================ */
+
+.onboarding-card {
+    background: var(--surface);
+    border: 1px solid var(--tertiary);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
+    position: relative;
+    overflow: hidden;
+    animation: slideDown 0.3s ease-out;
+}
+
+.onboarding-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--tertiary);
+}
+
+.onboarding-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-4);
+}
+
+.onboarding-header h3 {
+    margin: 0 0 var(--space-1) 0;
+    font-family: var(--font-serif);
+    font-size: var(--text-xl);
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--primary);
+}
+
+.onboarding-header p {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--secondary);
+}
+
+.onboarding-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--secondary);
+    cursor: pointer;
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+    transition: background 0.15s, color 0.15s;
+}
+
+.onboarding-dismiss:hover {
+    background: var(--neutral-deep);
+    color: var(--primary);
+}
+
+.onboarding-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.onboarding-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3);
+    background: var(--neutral);
+    border: 1px solid var(--neutral-deep);
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    color: var(--primary);
+    transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+
+a.onboarding-step:hover {
+    border-color: var(--tertiary);
+    transform: translateX(4px);
+    background: var(--surface);
+}
+
+.onboarding-step.completed {
+    background: var(--success-bg);
+    border-color: transparent;
+    opacity: 0.8;
+    cursor: default;
+}
+
+.onboarding-step.completed:hover {
+    transform: none;
+}
+
+/* The checkbox circle */
+.onboarding-check {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.onboarding-step.completed .onboarding-check {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+}
+
+.onboarding-text {
+    flex: 1;
+    font-size: var(--text-base);
+    font-weight: 500;
+}
+
+.onboarding-step.completed .onboarding-text {
+    text-decoration: line-through;
+    color: var(--success);
+}
+
+.onboarding-action {
+    font-size: var(--text-sm);
+    color: var(--tertiary);
+    font-weight: 600;
+}
+
+.onboarding-step.completed .onboarding-action {
+    display: none;
+}
+
+/* Progress bar at the bottom */
+.onboarding-progress {
+    margin-top: var(--space-5);
+    height: 4px;
+    background: var(--neutral-deep);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.onboarding-progress .bar {
+    height: 100%;
+    background: var(--tertiary);
+    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}

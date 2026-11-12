@@ -31,6 +31,7 @@
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <main id="main-content" tabindex="-1">
+        <div id="onboarding-container"></div>
         <div class="flex gap-16" style="align-items:center;justify-content:space-between;margin-bottom:32px;">
             <div>
                 <h1 id="greeting">Welcome back</h1>
@@ -79,9 +80,17 @@
 
             (async function loadDashboard() {
                 try {
+                    const freshUser = await Api.me();
+                    Auth.saveToken(Auth.getToken(), freshUser);
+                    document.getElementById('greeting').textContent =
+                        `Welcome back, ${freshUser.username}`;
+                    document.getElementById('view-profile-btn').href =
+                        `profile.html?user=${encodeURIComponent(freshUser.username)}`;
+
                     const subs = await Api.listSubmissions(10, 0);
                     const items = subs.items || [];
                     const totalSubs = subs.total || 0;
+                    renderOnboarding(freshUser, totalSubs);
 
                     const accepted = items.filter(
                         s => s.verdict === 'AC'
@@ -100,7 +109,7 @@
                         : null;
 
                     document.getElementById('subtitle').textContent =
-                        `Member since ${formatDate(user.created_at || new Date())}`;
+                        `Member since ${formatDate(freshUser.created_at || new Date())}`;
 
                     const statsGrid =
                         document.getElementById('stats-grid');
@@ -213,6 +222,89 @@
                         text: sub
                     })
                 ]);
+            }
+
+            function renderOnboarding(freshUser, totalSubs) {
+                const hasSubmitted = totalSubs > 0;
+                const hasSetEditor = localStorage.getItem('codearena_lang') !== null;
+                const hasProfile = Boolean(freshUser.bio || freshUser.avatar_url);
+                const completedCount = [hasSubmitted, hasSetEditor, hasProfile]
+                    .filter(Boolean).length;
+                const container = document.getElementById('onboarding-container');
+
+                if (
+                    completedCount === 3 ||
+                    localStorage.getItem('codearena_onboarding_dismissed') === '1'
+                ) {
+                    clear(container);
+                    return;
+                }
+
+                const steps = [
+                    {
+                        title: 'Submit your first solution',
+                        done: hasSubmitted,
+                        href: 'problems.html',
+                        actionText: 'Solve a problem →',
+                    },
+                    {
+                        title: 'Set your preferred language',
+                        done: hasSetEditor,
+                        href: 'problem.html?id=1',
+                        actionText: 'Open editor →',
+                    },
+                    {
+                        title: 'Complete your profile',
+                        done: hasProfile,
+                        href: `profile.html?user=${encodeURIComponent(freshUser.username)}`,
+                        actionText: 'Edit profile →',
+                    },
+                ];
+
+                const card = el('div', { class: 'onboarding-card' });
+                card.appendChild(el('div', { class: 'onboarding-header' }, [
+                    el('div', {}, [
+                        el('h3', { text: 'Getting Started' }),
+                        el('p', { text: `${completedCount} of 3 completed` }),
+                    ]),
+                    el('button', {
+                        class: 'onboarding-dismiss',
+                        type: 'button',
+                        title: 'Dismiss',
+                        'aria-label': 'Dismiss onboarding checklist',
+                        onclick: () => {
+                            localStorage.setItem('codearena_onboarding_dismissed', '1');
+                            clear(container);
+                        },
+                    }, [icon('close', 18)]),
+                ]));
+
+                const list = el('div', { class: 'onboarding-list' });
+                steps.forEach(step => {
+                    const row = step.done
+                        ? el('div', { class: 'onboarding-step completed' }, [
+                            el('div', { class: 'onboarding-check' }, [icon('check', 14)]),
+                            el('div', { class: 'onboarding-text', text: step.title }),
+                        ])
+                        : el('a', { href: step.href, class: 'onboarding-step' }, [
+                            el('div', { class: 'onboarding-check' }),
+                            el('div', { class: 'onboarding-text', text: step.title }),
+                            el('div', { class: 'onboarding-action', text: step.actionText }),
+                        ]);
+                    list.appendChild(row);
+                });
+                card.appendChild(list);
+
+                const progress = el('div', { class: 'onboarding-progress' }, [
+                    el('div', {
+                        class: 'bar',
+                        style: { width: `${Math.round((completedCount / 3) * 100)}%` },
+                    }),
+                ]);
+                card.appendChild(progress);
+
+                clear(container);
+                container.appendChild(card);
             }
         })();
     </script>

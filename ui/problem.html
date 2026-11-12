@@ -333,6 +333,11 @@
 
                 try {
                     const r = await Api.submit(problemId, language.value, source.value);
+                    try {
+                        localStorage.setItem('codearena_lang', language.value);
+                    } catch (storageError) {
+                        console.warn('Could not save preferred language:', storageError);
+                    }
                     toast(`Submission #${r.id} created`, 'success');
                     showResult(r.id);
                 } catch (err) {
