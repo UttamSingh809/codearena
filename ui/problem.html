@@ -109,6 +109,12 @@
             const source = document.getElementById('source');
             const language = document.getElementById('language');
             const submitBtn = document.getElementById('submit-btn');
+            window.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitBtn.disabled) {
+                    e.preventDefault();
+                    submitBtn.click();
+                }
+            });
             const clearBtn = document.getElementById('clear-btn');
             const submitStat = document.getElementById('submit-status');
             const charCount = document.getElementById('char-count');

@@ -920,3 +920,203 @@ function celebrateAC() {
         }));
     }, 250);
 }
+
+// ------------------------------------------------------------------
+// Keyboard shortcuts modal
+// ------------------------------------------------------------------
+
+const SHORTCUTS = [
+    {
+        category: 'Navigation',
+        items: [
+            { keys: ['g', 'd'], label: 'Go to Dashboard' },
+            { keys: ['g', 'p'], label: 'Go to Problems' },
+            { keys: ['g', 's'], label: 'Go to Submissions' },
+            { keys: ['g', 'l'], label: 'Go to Leaderboard' },
+            { keys: ['g', 'm'], label: 'Go to your Profile' },
+        ]
+    },
+    {
+        category: 'Editor',
+        items: [
+            { keys: ['Ctrl', 'Enter'], label: 'Submit code' },
+            { keys: ['Tab'], label: 'Insert 4 spaces' },
+            { keys: ['?'], label: 'Show this help menu' },
+            { keys: ['Esc'], label: 'Close modal or dialog' },
+        ]
+    }
+];
+
+(function setupShortcutsModal() {
+    if (typeof window === 'undefined') return;
+
+    let modalEl = null;
+    let backdropEl = null;
+    let lastFocusedElement = null;
+    let currentSequence = '';
+
+    function buildModal() {
+        if (modalEl) return;
+
+        backdropEl = el('div', { class: 'shortcuts-backdrop' });
+        backdropEl.addEventListener('click', (e) => {
+            if (e.target === backdropEl) closeModal();
+        });
+
+        modalEl = el('div', {
+            class: 'shortcuts-modal',
+            role: 'dialog',
+            'aria-modal': 'true',
+            'aria-labelledby': 'shortcuts-title'
+        });
+
+        // Header
+        const header = el('div', { class: 'shortcuts-header' }, [
+            el('h2', { id: 'shortcuts-title', text: 'Keyboard Shortcuts' }),
+            el('button', {
+                class: 'shortcuts-close',
+                'aria-label': 'Close',
+                onclick: closeModal
+            }, [
+                // Simple X icon
+                (() => {
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('width', '20');
+                    svg.setAttribute('height', '20');
+                    svg.setAttribute('viewBox', '0 0 24 24');
+                    svg.setAttribute('fill', 'none');
+                    svg.setAttribute('stroke', 'currentColor');
+                    svg.setAttribute('stroke-width', '2');
+                    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    p.setAttribute('d', 'M18 6L6 18M6 6l12 12');
+                    svg.appendChild(p);
+                    return svg;
+                })()
+            ])
+        ]);
+        modalEl.appendChild(header);
+
+        // Body
+        const body = el('div', { class: 'shortcuts-body' });
+
+        SHORTCUTS.forEach(section => {
+            const sectionEl = el('div', { class: 'shortcuts-section' }, [
+                el('h3', { text: section.category })
+            ]);
+
+            section.items.forEach(item => {
+                const keysEl = el('div', { class: 'shortcut-keys' });
+                item.keys.forEach((key, i) => {
+                    keysEl.appendChild(el('kbd', { text: key }));
+                    if (i < item.keys.length - 1) {
+                        keysEl.appendChild(el('span', { text: '+', class: 'muted', style: { fontSize: '10px' } }));
+                    }
+                });
+
+                sectionEl.appendChild(el('div', { class: 'shortcut-row' }, [
+                    el('span', { text: item.label }),
+                    keysEl
+                ]));
+            });
+
+            body.appendChild(sectionEl);
+        });
+
+        modalEl.appendChild(body);
+        backdropEl.appendChild(modalEl);
+        document.body.appendChild(backdropEl);
+    }
+
+    function openModal() {
+        buildModal();
+        lastFocusedElement = document.activeElement;
+
+        backdropEl.classList.add('visible');
+
+        // Focus the close button for accessibility
+        const closeBtn = modalEl.querySelector('.shortcuts-close');
+        if (closeBtn) closeBtn.focus();
+
+        // Trap focus inside modal
+        document.addEventListener('keydown', trapFocus);
+    }
+
+    function closeModal() {
+        if (!backdropEl) return;
+        backdropEl.classList.remove('visible');
+        document.removeEventListener('keydown', trapFocus);
+
+        // Restore focus to where it was before the modal opened
+        if (lastFocusedElement && lastFocusedElement.focus) {
+            lastFocusedElement.focus();
+        }
+    }
+
+    function trapFocus(e) {
+        if (e.key !== 'Tab') return;
+
+        const focusable = modalEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        if (focusable.length === 0) return;
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+        }
+    }
+
+    // Global keydown handler
+    window.addEventListener('keydown', (e) => {
+        // Ignore if user is typing in an input/textarea or Monaco editor
+        const tag = e.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || e.target.closest('.monaco-editor')) {
+            return;
+        }
+
+        // Escape closes the modal
+        if (e.key === 'Escape') {
+            closeModal();
+            return;
+        }
+
+        // Question mark opens the modal
+        if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+            e.preventDefault();
+            openModal();
+            return;
+        }
+
+        // Quick navigation sequences (g + d, g + p, etc.)
+        if (e.key === 'g') {
+            currentSequence = 'g';
+            setTimeout(() => { currentSequence = ''; }, 1000); // reset after 1 second
+            return;
+        }
+
+        if (currentSequence === 'g') {
+            currentSequence = '';
+            const routes = {
+                'd': 'dashboard.html',
+                'p': 'problems.html',
+                's': 'history.html',
+                'l': 'leaderboard.html',
+                'm': () => {
+                    const user = Auth.getUser();
+                    return user ? `profile.html?user=${encodeURIComponent(user.username)}` : null;
+                }
+            };
+
+            const dest = routes[e.key];
+            if (dest) {
+                e.preventDefault();
+                const url = typeof dest === 'function' ? dest() : dest;
+                if (url) location.href = url;
+            }
+        }
+    });
+})();
