@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api/stats", tags=["stats"])
 @router.get("/heatmap")
 async def submission_heatmap(
     days: int = Query(365, ge=7, le=730),
+    username: str = Query(None),
     user: CurrentUser = Depends(get_current_user),
 ):
     """
@@ -35,6 +36,18 @@ async def submission_heatmap(
 
     Days with zero submissions are included with value 0.
     """
+    # If a username was provided, look up their ID
+    if username:
+        target = await db.fetch_one(
+            "SELECT id FROM users WHERE username = $1",
+            username,
+        )
+        if target is None:
+            raise HTTPException(status_code=404, detail="user not found")
+        target_id = target["id"]
+    else:
+        target_id = user.id
+
     end = date.today()
     start = end - timedelta(days=days - 1)
 

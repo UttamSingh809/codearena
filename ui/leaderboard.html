@@ -95,9 +95,12 @@
                                     text: String(rank)
                                 }),
                             ]),
-                            el('td', {
-                                text: r.username
-                            }),
+                            el('td', {}, [
+                                el('a', {
+                                    href: `profile.html?user=${encodeURIComponent(r.username)}`,
+                                    text: r.username,
+                                }),
+                            ]),
                             el('td', {
                                 class: 'num',
                                 text: String(r.total_score)

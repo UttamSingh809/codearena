@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>CodeArena — Profile</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <main>
+        <div id="profile-view">
+            <div class="loading-block"><span class="spinner lg"></span><span>Loading…</span></div>
+        </div>
+    </main>
+
+    <script src="static/app.js"></script>
+    <script>
+        'use strict';
+
+        (function () {
+            if (!requireAuth('profile')) return;
+
+            const params = new URLSearchParams(location.search);
+            const username = params.get('user');
+            const container = document.getElementById('profile-view');
+
+            if (!username) {
+                emptyState(container, 'No user selected',
+                    'Open a profile from the leaderboard.');
+                return;
+            }
+
+            (async () => {
+                // Render skeletons
+                container.innerHTML = `
+                    <div class="skeleton skeleton-title" style="width:200px;height:32px;margin-bottom:8px;"></div>
+                    <div class="skeleton skeleton-line medium" style="margin-bottom:24px;"></div>
+                    <div class="card-grid mb-24">
+                        <div class="skeleton-stat"></div>
+                        <div class="skeleton-stat"></div>
+                        <div class="skeleton-stat"></div>
+                        <div class="skeleton-stat"></div>
+                    </div>
+                    <div class="skeleton-editor-body" style="height:180px;"></div>
+                `;
+
+                try {
+                    const [profile, heatmap] = await Promise.all([
+                        apiFetch(`/api/users/${encodeURIComponent(username)}`),
+                        apiFetch(`/api/stats/heatmap?username=${encodeURIComponent(username)}&days=365`),
+                    ]);
+
+                    document.title = `CodeArena — ${profile.username}`;
+                    renderProfile(container, profile, heatmap);
+                } catch (err) {
+                    emptyState(container, 'Profile not found', err.message);
+                }
+            })();
+
+            function renderProfile(container, profile, heatmap) {
+                clear(container);
+
+                // Header: avatar, username, join date
+                const initial = profile.username.charAt(0).toUpperCase();
+                container.appendChild(el('div', {
+                    style: { display: 'flex', gap: '24px', alignItems: 'center', marginBottom: '32px' }
+                }, [
+                    el('div', {
+                        class: 'avatar',
+                        style: { width: '72px', height: '72px', fontSize: '28px' },
+                        text: initial,
+                    }),
+                    el('div', {}, [
+                        el('h1', { text: profile.username, style: { margin: 0, fontSize: '2rem' } }),
+                        el('p', {
+                            class: 'muted',
+                            text: `Joined ${formatDate(profile.joined_at)} · ${profile.role}`,
+                            style: { margin: '4px 0 0' },
+                        }),
+                    ]),
+                ]));
+
+                // Stats grid
+                const statsGrid = el('div', { class: 'card-grid mb-24' }, [
+                    statCard('Global Rank', profile.rank ? `#${profile.rank}` : '—', 'across all users'),
+                    statCard('Score', profile.total_score, 'total points'),
+                    statCard('Solved', profile.total_solved, 'problems with AC'),
+                    statCard('Submissions', profile.total_submissions, 'all time'),
+                ]);
+                container.appendChild(statsGrid);
+
+                // Heat-map
+                const heatmapContainer = el('div', { id: 'profile-heatmap' });
+                container.appendChild(heatmapContainer);
+                renderHeatmap(heatmapContainer, heatmap);
+            }
+
+            function statCard(label, value, sub) {
+                return el('div', { class: 'stat' }, [
+                    el('div', { class: 'stat-label', text: label }),
+                    el('div', { class: 'stat-value', text: String(value) }),
+                    sub && el('div', { class: 'stat-sub', text: sub }),
+                ]);
+            }
+
+            function renderHeatmap(container, data) {
+                // Reuse the same code as dashboard's heatmap
+                const start = new Date(data.start + 'T00:00:00Z');
+                const end = new Date(data.end + 'T00:00:00Z');
+                const startSunday = new Date(start);
+                startSunday.setUTCDate(startSunday.getUTCDate() - startSunday.getUTCDay());
+
+                const days = [];
+                const cursor = new Date(startSunday);
+                while (cursor <= end) {
+                    const key = cursor.toISOString().slice(0, 10);
+                    const inRange = cursor >= start && cursor <= end;
+                    days.push({
+                        date: new Date(cursor),
+                        key,
+                        count: inRange ? (data.days[key] || 0) : -1,
+                        inRange,
+                    });
+                    cursor.setUTCDate(cursor.getUTCDate() + 1);
+                }
+
+                const columns = [];
+                for (let i = 0; i < days.length; i += 7) {
+                    columns.push(days.slice(i, i + 7));
+                }
+
+                const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+                function levelFor(count) {
+                    if (count <= 0) return 0;
+                    if (count <= 2) return 1;
+                    if (count <= 5) return 2;
+                    if (count <= 10) return 3;
+                    return 4;
+                }
+
+                const card = el('div', { class: 'heatmap-card' });
+                card.appendChild(el('div', { class: 'heatmap-header' }, [
+                    el('h3', { text: 'Submission Activity' }),
+                    el('span', {
+                        class: 'heatmap-total',
+                        text: `${data.total} submission${data.total === 1 ? '' : 's'} in the last year`,
+                    }),
+                ]));
+
+                const scroll = el('div', { class: 'heatmap-scroll' });
+                const outer = el('div');
+
+                // Month labels
+                const monthLabels = el('div', { class: 'heatmap-months' });
+                let lastMonth = -1;
+                for (const week of columns) {
+                    const first = week.find(d => d && d.inRange);
+                    if (!first) {
+                        monthLabels.appendChild(el('span', { text: '' }));
+                        continue;
+                    }
+                    const m = first.date.getUTCMonth();
+                    if (m !== lastMonth) {
+                        monthLabels.appendChild(el('span', { text: MONTHS[m] }));
+                        lastMonth = m;
+                    } else {
+                        monthLabels.appendChild(el('span', { text: '' }));
+                    }
+                }
+                outer.appendChild(monthLabels);
+
+                // Grid
+                const grid = el('div', { class: 'heatmap-grid' });
+                const dayLabels = el('div', { class: 'heatmap-days' });
+                for (let i = 0; i < 7; i++) {
+                    const show = i === 1 || i === 3 || i === 5;
+                    dayLabels.appendChild(el('span', {
+                        text: show ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i] : '',
+                        class: show ? '' : 'empty',
+                    }));
+                }
+                grid.appendChild(dayLabels);
+
+                const columnsContainer = el('div', { class: 'heatmap-columns' });
+                for (const week of columns) {
+                    const weekCol = el('div', { class: 'heatmap-week' });
+                    for (let dow = 0; dow < 7; dow++) {
+                        const day = week[dow];
+                        if (!day || !day.inRange) {
+                            weekCol.appendChild(el('div', {
+                                class: 'heatmap-cell',
+                                style: { visibility: 'hidden' },
+                            }));
+                            continue;
+                        }
+                        const level = levelFor(day.count);
+                        weekCol.appendChild(el('div', {
+                            class: `heatmap-cell level-${level}`,
+                            'data-date': day.key,
+                            'data-count': String(day.count),
+                            title: `${day.count} submission${day.count === 1 ? '' : 's'} on ${day.key}`,
+                        }));
+                    }
+                    columnsContainer.appendChild(weekCol);
+                }
+                grid.appendChild(columnsContainer);
+                outer.appendChild(grid);
+
+                // Legend
+                outer.appendChild(el('div', { class: 'heatmap-legend' }, [
+                    el('span', { text: 'Less' }),
+                    el('div', { class: 'heatmap-cell level-0' }),
+                    el('div', { class: 'heatmap-cell level-1' }),
+                    el('div', { class: 'heatmap-cell level-2' }),
+                    el('div', { class: 'heatmap-cell level-3' }),
+                    el('div', { class: 'heatmap-cell level-4' }),
+                    el('span', { text: 'More' }),
+                ]));
+
+                scroll.appendChild(outer);
+                card.appendChild(scroll);
+                container.appendChild(card);
+            }
+        })();
+    </script>
+</body>
+
+</html>
