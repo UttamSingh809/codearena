@@ -45,7 +45,8 @@ async def register(req: RegisterRequest) -> TokenResponse:
             """
             INSERT INTO users (username, email, password_hash)
             VALUES ($1, $2, $3)
-            RETURNING id, username, email, role, created_at, last_login_at
+            RETURNING id, username, email, role, created_at, last_login_at,
+                      bio, avatar_url
             """,
             req.username, req.email, pw_hash,
         )
@@ -81,7 +82,7 @@ async def login(req: LoginRequest) -> TokenResponse:
     row = await db.fetch_one(
         """
         SELECT id, username, email, password_hash, role,
-               created_at, last_login_at
+               created_at, last_login_at, bio, avatar_url
         FROM users WHERE email = $1
         """,
         req.email,
@@ -124,6 +125,8 @@ async def login(req: LoginRequest) -> TokenResponse:
             role=row["role"],
             created_at=row["created_at"],
             last_login_at=row["last_login_at"],
+            bio=row["bio"],
+            avatar_url=row["avatar_url"],
         ),
     )
 
@@ -133,7 +136,8 @@ async def me(user: CurrentUser = Depends(get_current_user)) -> UserPublic:
     """Return the authenticated user's profile."""
     row = await db.fetch_one(
         """
-        SELECT id, username, email, role, created_at, last_login_at
+        SELECT id, username, email, role, created_at, last_login_at,
+               bio, avatar_url
         FROM users WHERE id = $1
         """,
         user.id,

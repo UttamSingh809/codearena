@@ -3,17 +3,72 @@
 
 <head>
     <meta charset="utf-8">
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('codearena_theme');
+                if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia
+                        && window.matchMedia('(prefers-color-scheme: dark)').matches
+                        ? 'dark'
+                        : 'light';
+                }
+                document.documentElement.dataset.theme = theme;
+            } catch (e) {
+                document.documentElement.dataset.theme = 'light';
+            }
+        })();
+    </script>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#FBEDE8">
     <title>CodeArena — Profile</title>
     <link rel="stylesheet" href="static/style.css">
 </head>
 
 <body>
-    <main>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <main id="main-content" tabindex="-1">
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+            <a href="leaderboard.html">Leaderboard</a>
+            <span class="sep">/</span>
+            <span class="current" id="profile-breadcrumb-title">Loading…</span>
+        </nav>
         <div id="profile-view">
             <div class="loading-block"><span class="spinner lg"></span><span>Loading…</span></div>
         </div>
     </main>
+
+    <div id="edit-modal" class="shortcuts-backdrop hidden"
+        role="dialog" aria-modal="true" aria-labelledby="edit-profile-title">
+        <section class="shortcuts-modal" style="max-width:500px;">
+            <header class="shortcuts-header">
+                <h2 id="edit-profile-title">Edit Profile</h2>
+                <button id="close-edit-modal" class="shortcuts-close" type="button"
+                    aria-label="Close edit profile dialog">✕</button>
+            </header>
+            <div class="shortcuts-body">
+                <form id="edit-form">
+                    <div class="field">
+                        <label for="edit-avatar">Avatar URL</label>
+                        <input type="url" id="edit-avatar" maxlength="2048"
+                            placeholder="https://example.com/avatar.jpg">
+                        <span class="muted" style="font-size:11px;">Use an HTTP or HTTPS image URL.</span>
+                    </div>
+                    <div class="field">
+                        <label for="edit-bio">Bio</label>
+                        <textarea id="edit-bio" rows="4" maxlength="200"
+                            placeholder="Tell us about yourself..."
+                            style="min-height:80px;font-family:var(--font-sans);"></textarea>
+                    </div>
+                    <p id="edit-error" class="field-error hidden" role="alert"></p>
+                    <div class="flex" style="justify-content:flex-end;gap:8px;margin-top:24px;">
+                        <button id="cancel-edit-modal" type="button" class="btn ghost">Cancel</button>
+                        <button type="submit" class="btn" id="save-profile-btn">Save</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
 
     <script src="static/app.js"></script>
     <script>
@@ -25,6 +80,47 @@
             const params = new URLSearchParams(location.search);
             const username = params.get('user');
             const container = document.getElementById('profile-view');
+            const breadcrumbTitle = document.getElementById('profile-breadcrumb-title');
+            const currentUser = Auth.getUser();
+            const isOwnProfile = currentUser && currentUser.username === username;
+            const editModal = document.getElementById('edit-modal');
+            const editForm = document.getElementById('edit-form');
+            const avatarInput = document.getElementById('edit-avatar');
+            const bioInput = document.getElementById('edit-bio');
+            const editError = document.getElementById('edit-error');
+            const saveButton = document.getElementById('save-profile-btn');
+            let profileData = null;
+            let heatmapData = null;
+            let modalReturnFocus = null;
+
+            function closeEditModal() {
+                editModal.classList.remove('visible');
+                editModal.classList.add('hidden');
+                if (modalReturnFocus) modalReturnFocus.focus();
+            }
+
+            function openEditModal() {
+                avatarInput.value = profileData.avatar_url || '';
+                bioInput.value = profileData.bio || '';
+                editError.textContent = '';
+                editError.classList.add('hidden');
+                modalReturnFocus = document.activeElement;
+                editModal.classList.remove('hidden');
+                void editModal.offsetWidth;
+                editModal.classList.add('visible');
+                avatarInput.focus();
+            }
+
+            document.getElementById('close-edit-modal').addEventListener('click', closeEditModal);
+            document.getElementById('cancel-edit-modal').addEventListener('click', closeEditModal);
+            editModal.addEventListener('click', event => {
+                if (event.target === editModal) closeEditModal();
+            });
+            window.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && editModal.classList.contains('visible')) {
+                    closeEditModal();
+                }
+            });
 
             if (!username) {
                 emptyState(container, 'No user selected',
@@ -48,39 +144,103 @@
 
                 try {
                     const [profile, heatmap] = await Promise.all([
-                        apiFetch(`/api/users/${encodeURIComponent(username)}`),
-                        apiFetch(`/api/stats/heatmap?username=${encodeURIComponent(username)}&days=365`),
+                        apiFetchWithRetry(`/api/users/${encodeURIComponent(username)}`),
+                        apiFetchWithRetry(`/api/stats/heatmap?username=${encodeURIComponent(username)}&days=365`),
                     ]);
 
+                    profileData = profile;
+                    heatmapData = heatmap;
                     document.title = `CodeArena — ${profile.username}`;
+                    breadcrumbTitle.textContent = profile.username;
                     renderProfile(container, profile, heatmap);
                 } catch (err) {
-                    emptyState(container, 'Profile not found', err.message);
+                    console.error('Failed to load profile:', err);
+                    emptyState(container, 'Failed to load profile', friendlyErrorMessage(err));
                 }
             })();
+
+            editForm.addEventListener('submit', async event => {
+                event.preventDefault();
+                if (!isOwnProfile || !profileData) return;
+
+                const avatarUrl = avatarInput.value.trim() || null;
+                const bio = bioInput.value.trim() || null;
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving…';
+                editError.textContent = '';
+                editError.classList.add('hidden');
+
+                try {
+                    await apiFetch('/api/users/me/profile', {
+                        method: 'PUT',
+                        body: JSON.stringify({ avatar_url: avatarUrl, bio }),
+                    });
+
+                    profileData = { ...profileData, avatar_url: avatarUrl, bio };
+                    Auth.saveToken(Auth.getToken(), {
+                        ...Auth.getUser(),
+                        avatar_url: avatarUrl,
+                        bio,
+                    });
+                    closeEditModal();
+                    renderProfile(container, profileData, heatmapData);
+                    toast('Profile updated.', 'success');
+                } catch (err) {
+                    console.error('Failed to update profile:', err);
+                    editError.textContent = friendlyErrorMessage(err, 'Could not update profile.');
+                    editError.classList.remove('hidden');
+                } finally {
+                    saveButton.disabled = false;
+                    saveButton.textContent = 'Save';
+                }
+            });
 
             function renderProfile(container, profile, heatmap) {
                 clear(container);
 
-                // Header: avatar, username, join date
+                // Header: avatar, username, bio, and owner controls
                 const initial = profile.username.charAt(0).toUpperCase();
-                container.appendChild(el('div', {
+                const avatar = el('div', {
+                    class: 'avatar profile-avatar',
+                    role: 'img',
+                    'aria-label': `${profile.username}'s avatar`,
+                    style: { width: '80px', height: '80px', fontSize: '32px' },
+                    text: initial,
+                });
+                if (profile.avatar_url) {
+                    avatar.appendChild(el('img', {
+                        class: 'avatar-image',
+                        src: profile.avatar_url,
+                        alt: '',
+                        referrerpolicy: 'no-referrer',
+                        onerror: event => event.currentTarget.remove(),
+                    }));
+                }
+
+                const profileHeader = el('div', {
                     style: { display: 'flex', gap: '24px', alignItems: 'center', marginBottom: '32px' }
                 }, [
-                    el('div', {
-                        class: 'avatar',
-                        style: { width: '72px', height: '72px', fontSize: '28px' },
-                        text: initial,
-                    }),
-                    el('div', {}, [
+                    avatar,
+                    el('div', { style: { flex: 1 } }, [
                         el('h1', { text: profile.username, style: { margin: 0, fontSize: '2rem' } }),
                         el('p', {
                             class: 'muted',
                             text: `Joined ${formatDate(profile.joined_at)} · ${profile.role}`,
                             style: { margin: '4px 0 0' },
                         }),
+                        profile.bio && el('p', {
+                            text: profile.bio,
+                            style: { margin: '8px 0 0', whiteSpace: 'pre-wrap' },
+                        }),
                     ]),
-                ]));
+                    isOwnProfile && el('button', {
+                        class: 'btn',
+                        type: 'button',
+                        text: 'Edit Profile',
+                        onclick: openEditModal,
+                    }),
+                ]);
+                container.appendChild(profileHeader);
 
                 // Stats grid
                 const statsGrid = el('div', { class: 'card-grid mb-24' }, [

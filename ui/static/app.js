@@ -523,15 +523,7 @@ function renderHeader(activePage) {
             }).catch(() => { /* optional */ });
         }
 
-        // Avatar link to own profile
-        const initial = (user.username || '?').charAt(0).toUpperCase();
-        const avatarLink = el('a', {
-            href: `profile.html?user=${encodeURIComponent(user.username)}`,
-            class: 'avatar',
-            title: 'View your profile',
-            text: initial,
-            style: { textDecoration: 'none' },
-        });
+        const avatarLink = createAvatarLink(user);
         menu.appendChild(avatarLink);
         menu.appendChild(el('span', { text: user.username }));
 
@@ -568,7 +560,43 @@ function requireAuth(activePage) {
     const skipLink = document.querySelector('.skip-link');
     if (skipLink) skipLink.after(header);
     else document.body.insertBefore(header, document.body.firstChild);
+    refreshCachedUser(header);
     return true;
+}
+
+function createAvatarLink(user) {
+    const initial = (user.username || '?').charAt(0).toUpperCase();
+    const avatarLink = el('a', {
+        href: `profile.html?user=${encodeURIComponent(user.username)}`,
+        class: 'avatar',
+        title: 'View your profile',
+        'aria-label': `View ${user.username}'s profile`,
+        style: { textDecoration: 'none' },
+    }, [el('span', { class: 'avatar-initial', text: initial })]);
+
+    if (user.avatar_url) {
+        avatarLink.appendChild(el('img', {
+            class: 'avatar-image',
+            src: user.avatar_url,
+            alt: '',
+            referrerpolicy: 'no-referrer',
+            onerror: event => event.currentTarget.remove(),
+        }));
+    }
+
+    return avatarLink;
+}
+
+function refreshCachedUser(header) {
+    const token = Auth.getToken();
+    Api.me().then(user => {
+        if (!user || Auth.getToken() !== token) return;
+        Auth.saveToken(token, user);
+        const avatarLink = header.querySelector('.avatar');
+        if (avatarLink) avatarLink.replaceWith(createAvatarLink(user));
+    }).catch(err => {
+        console.warn('Could not refresh current user profile:', err);
+    });
 }
 
 // ------------------------------------------------------------------

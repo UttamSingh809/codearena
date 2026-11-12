@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import db
 from ..deps import CurrentUser, get_current_user
+from ..models import UpdateProfileRequest
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -25,7 +26,7 @@ async def get_public_profile(
     """
     target = await db.fetch_one(
         """
-        SELECT id, username, role, created_at
+        SELECT id, username, role, created_at, bio, avatar_url
         FROM users
         WHERE username = $1
         """,
@@ -71,8 +72,36 @@ async def get_public_profile(
         "username": target["username"],
         "role": target["role"],
         "joined_at": target["created_at"],
+        "bio": target["bio"],
+        "avatar_url": target["avatar_url"],
         "rank": rank_row["rank"] if rank_row else None,
         "total_score": stats["total_score"],
         "total_solved": stats["total_solved"],
         "total_submissions": stats["total_submissions"],
     }
+
+
+@router.put("/me/profile")
+async def update_profile(
+    req: UpdateProfileRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Update the authenticated user's public bio and avatar URL."""
+    provided = req.model_fields_set
+    if not provided:
+        return {"status": "ok"}
+
+    await db.execute(
+        """
+        UPDATE users
+        SET bio = CASE WHEN $1 THEN $2 ELSE bio END,
+            avatar_url = CASE WHEN $3 THEN $4 ELSE avatar_url END
+        WHERE id = $5
+        """,
+        "bio" in provided,
+        req.bio,
+        "avatar_url" in provided,
+        req.avatar_url,
+        user.id,
+    )
+    return {"status": "ok"}
