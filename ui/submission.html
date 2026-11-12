@@ -28,7 +28,8 @@
 </head>
 
 <body>
-    <main class="narrow">
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <main class="narrow" id="main-content" tabindex="-1">
         <nav class="breadcrumb" id="submission-breadcrumb">
             <a href="history.html">Submissions</a>
             <span class="sep">/</span>
@@ -59,7 +60,9 @@
             let hasCelebrated = false;
 
             function render(s) {
-                document.title = `CodeArena — Submission #${s.id}`;
+                document.title = s.result
+                    ? `CodeArena — Submission #${s.id} (${s.result.verdict})`
+                    : `CodeArena — Submission #${s.id}`;
                 const bcTitle = document.getElementById('submission-breadcrumb-title');
                 if (bcTitle) bcTitle.textContent = `#${s.id}`;
                 clear(container);
@@ -82,7 +85,8 @@
                 // Hero: verdict + test case progress + metrics
                 // ============================================================
                 const hero = el('div', {
-                    class: 'verdict-hero ' + verdict
+                    class: 'verdict-hero ' + verdict,
+                    'aria-live': 'polite',
                 });
 
                 // Left: verdict name + subline

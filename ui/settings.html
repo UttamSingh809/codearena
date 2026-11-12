@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <script>
+        // Prevent FOUC (same inline script as other pages)
+        (function () {
+            try {
+                var theme = localStorage.getItem('codearena_theme');
+                if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia
+                        && window.matchMedia('(prefers-color-scheme: dark)').matches
+                        ? 'dark'
+                        : 'light';
+                }
+                document.documentElement.dataset.theme = theme;
+            } catch (e) {
+                document.documentElement.dataset.theme = 'light';
+            }
+        })();
+    </script>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#FBEDE8">
+    <title>CodeArena — Settings</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <main id="main-content" class="narrow" tabindex="-1">
+        <h1>Settings</h1>
+        <p class="muted mb-24">Customize how CodeArena looks and behaves.</p>
+
+        <section class="card mb-24">
+            <h3>Appearance</h3>
+            <div class="field" style="flex-direction:row;align-items:center;gap:12px;">
+                <label for="theme-select" style="min-width:140px;">Theme</label>
+                <select id="theme-select" style="max-width:200px;">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="system">System</option>
+                </select>
+            </div>
+            <div class="field" style="flex-direction:row;align-items:center;gap:12px;">
+                <label for="sticky-header" style="min-width:140px;">Sticky header</label>
+                <input type="checkbox" id="sticky-header" style="width:20px;height:20px;">
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>Comfort</h3>
+            <div class="field" style="flex-direction:row;align-items:center;gap:12px;">
+                <label style="min-width:140px;">Reduce motion</label>
+                <span class="muted" id="reduced-motion-status">System preference</span>
+            </div>
+            <p class="muted" style="font-size:13px;margin-top:12px;">
+                CodeArena respects your operating system's "Reduce motion" and
+                "High contrast" preferences automatically. Change them in your OS
+                settings.
+            </p>
+        </section>
+    </main>
+
+    <script src="static/app.js"></script>
+    <script>
+        'use strict';
+
+        (function () {
+            if (!requireAuth('settings')) return;
+
+            const themeSelect = document.getElementById('theme-select');
+            const stickyToggle = document.getElementById('sticky-header');
+            const reducedMotion = document.getElementById('reduced-motion-status');
+
+            // Theme
+            const storedTheme = localStorage.getItem('codearena_theme');
+            if (storedTheme === 'light' || storedTheme === 'dark') {
+                themeSelect.value = storedTheme;
+            } else {
+                themeSelect.value = 'system';
+            }
+
+            themeSelect.addEventListener('change', () => {
+                const v = themeSelect.value;
+                if (v === 'system') {
+                    localStorage.removeItem('codearena_theme');
+                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
+                } else {
+                    setTheme(v);
+                }
+            });
+
+            // Sticky header
+            const stickyOff = localStorage.getItem('codearena_no_sticky') === '1';
+            stickyToggle.checked = !stickyOff;
+            document.body.classList.toggle('no-sticky-header', stickyOff);
+
+            stickyToggle.addEventListener('change', () => {
+                const off = !stickyToggle.checked;
+                document.body.classList.toggle('no-sticky-header', off);
+                if (off) localStorage.setItem('codearena_no_sticky', '1');
+                else localStorage.removeItem('codearena_no_sticky');
+            });
+
+            // Reduced motion status (read-only)
+            if (window.matchMedia) {
+                const rmq = window.matchMedia('(prefers-reduced-motion: reduce)');
+                reducedMotion.textContent = rmq.matches ? 'Enabled' : 'Disabled';
+            }
+        })();
+    </script>
+</body>
+
+</html>

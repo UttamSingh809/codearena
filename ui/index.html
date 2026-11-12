@@ -27,6 +27,7 @@
 </head>
 
 <body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
     <div class="auth-screen">
         <div class="auth-hero">
             <h1>Code. Compete.<br>Conquer.</h1>
@@ -43,7 +44,7 @@
             </div>
         </div>
 
-        <div class="auth-form-panel">
+        <main class="auth-form-panel" id="main-content" tabindex="-1">
             <div class="auth-tabs">
                 <button id="tab-login" class="active">Sign in</button>
                 <button id="tab-register">Register</button>
@@ -79,7 +80,7 @@
                 </div>
                 <button type="submit" class="btn" style="width:100%;">Create account</button>
             </form>
-        </div>
+        </main>
     </div>
 
     <script src="static/app.js"></script>

@@ -2195,3 +2195,171 @@ main.problem-layout {
 #monaco-container .monaco-editor .overflow-guard {
     border-radius: 0;
 }
+
+/* ============================================================
+ * Accessibility & comfort settings
+ * ============================================================ */
+
+/* ---- 1. Visible focus ring ---- */
+
+/*
+ * Show a strong, branded focus ring on every interactive element
+ * when the user is navigating by keyboard. Mouse clicks do not
+ * show the ring (thanks to :focus-visible), which prevents the
+ * ring from appearing on every button click.
+ */
+:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Remove the default browser outline for mouse clicks only */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+/* Reinforce the focus ring on the most common controls */
+.btn:focus-visible,
+a:focus-visible,
+.theme-toggle:focus-visible,
+.btn-logout:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 3px;
+}
+
+/* ---- 2. Skip to main content link ---- */
+
+/*
+ * This link is invisible by default, but appears in the top-left
+ * corner when it receives focus (i.e., when the user presses Tab
+ * on page load). It lets keyboard-only users skip the header nav
+ * and jump straight to the main content.
+ */
+.skip-link {
+    position: absolute;
+    top: -100px;
+    left: 0;
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface);
+    color: var(--primary);
+    border: 1px solid var(--tertiary);
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    z-index: 9999;
+    text-decoration: none;
+    transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+    top: var(--space-2);
+    left: var(--space-2);
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+}
+
+/* ---- 3. Screen reader only text ---- */
+
+/*
+ * Hide content visually, but keep it accessible to screen
+ * readers. Use for labels on icon-only buttons.
+ */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ---- 4. Reduced motion ---- */
+
+/*
+ * Respect the OS-level "Reduce motion" preference. Users with
+ * vestibular disorders can be made physically ill by parallax,
+ * shake, scale animations, and the confetti burst. When this
+ * preference is set, disable all animations and transitions
+ * (except the essential loading spinner, which needs to spin).
+ */
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .skeleton::after {
+        animation: none;
+    }
+
+    .skeleton {
+        animation: none;
+    }
+
+    .streak-badge {
+        animation: none;
+    }
+
+    .badge.PROCESSING::before {
+        animation: none;
+    }
+
+    .toast {
+        animation: none;
+    }
+
+    /* Keep the spinner spinning but slower */
+    .spinner {
+        animation-duration: 1.4s !important;
+        animation-iteration-count: infinite !important;
+    }
+}
+
+/* ---- 5. High contrast preference ---- */
+
+/*
+ * Some users enable "High contrast" in their OS settings. In that
+ * case, strengthen the borders and darken secondary text so the
+ * page is easier to read.
+ */
+@media (prefers-contrast: more) {
+    :root,
+    :root[data-theme="light"],
+    :root[data-theme="dark"] {
+        --secondary: var(--primary);
+        --neutral-deep: var(--secondary);
+    }
+
+    .card,
+    .stat,
+    .table-wrap,
+    .skeleton-table {
+        border-width: 2px;
+    }
+
+    .btn {
+        border: 2px solid currentColor;
+    }
+}
+
+/* ---- 6. Comfort: disable sticky header if it feels heavy ---- */
+
+/*
+ * Some users find the sticky header distracting. This class can
+ * be toggled from the settings panel (future feature) to turn
+ * off position: sticky on the header.
+ */
+body.no-sticky-header .app-header {
+    position: static;
+}

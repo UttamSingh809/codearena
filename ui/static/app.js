@@ -20,6 +20,8 @@ function toast(message, type = 'info', durationMs = 4000) {
     if (!container) {
         container = document.createElement('div');
         container.id = 'toast-container';
+        container.setAttribute('aria-live', 'polite');
+        container.setAttribute('aria-atomic', 'false');
         document.body.appendChild(container);
     }
     const t = document.createElement('div');
@@ -420,6 +422,9 @@ function renderHeader(activePage) {
         menu.appendChild(avatarLink);
         menu.appendChild(el('span', { text: user.username }));
 
+        const themeBtn = menu.querySelector('.theme-toggle');
+        if (themeBtn) menu.appendChild(themeBtn);
+
         // Logout
         const logout = el('button', {
             class: 'btn-logout',
@@ -427,6 +432,10 @@ function renderHeader(activePage) {
             onclick: () => Auth.logout(),
         });
         menu.appendChild(logout);
+        menu.appendChild(el('a', {
+            href: 'settings.html',
+            text: 'Settings',
+        }));
         header.appendChild(menu);
     }
 
@@ -438,7 +447,14 @@ function requireAuth(activePage) {
         location.href = 'index.html';
         return false;
     }
-    document.body.insertBefore(renderHeader(activePage), document.body.firstChild);
+    document.body.classList.toggle(
+        'no-sticky-header',
+        localStorage.getItem('codearena_no_sticky') === '1'
+    );
+    const header = renderHeader(activePage);
+    const skipLink = document.querySelector('.skip-link');
+    if (skipLink) skipLink.after(header);
+    else document.body.insertBefore(header, document.body.firstChild);
     return true;
 }
 
@@ -742,6 +758,7 @@ function verdictLabel(v) {
 
 function celebrateAC() {
     if (typeof confetti === 'undefined') return; // CDN blocked or not loaded
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 
     // Fire three bursts with slight delays for a more dramatic effect
     const duration = 1500;

@@ -28,7 +28,8 @@
 </head>
 
 <body>
-    <main class="problem-layout">
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <main class="problem-layout" id="main-content" tabindex="-1">
         <nav class="breadcrumb" id="problem-breadcrumb" style="grid-column: 1 / -1;">
             <a href="problems.html">Problems</a>
             <span class="sep">/</span>
@@ -72,7 +73,7 @@
                     <textarea id="source" placeholder="Write your solution here…" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
                     <div class="editor-status">
                         <span id="char-count" class="muted">0 / 65536</span>
-                        <span id="submit-status" class="muted"></span>
+                        <span id="submit-status" class="muted" aria-live="polite"></span>
                     </div>
                 </div>
 
@@ -144,7 +145,7 @@
 
             // Tab key inserts 4 spaces instead of moving focus
             source.addEventListener('keydown', e => {
-                if (e.key === 'Tab') {
+                if (e.key === 'Tab' && !e.shiftKey) {
                     e.preventDefault();
                     const start = source.selectionStart;
                     const end = source.selectionEnd;
@@ -318,6 +319,7 @@
                 clear(resultBody);
                 const r = s.result;
                 const verdict = r ? r.verdict : s.status;
+                document.title = `CodeArena — ${document.getElementById('problem-breadcrumb-title')?.textContent || 'Problem'} (${verdict})`;
 
                 // Compact verdict banner
                 resultBody.appendChild(el('div', {
