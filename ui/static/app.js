@@ -450,6 +450,41 @@ function renderHeader(activePage) {
     }
     header.appendChild(nav);
 
+    // Command palette trigger (fake search input)
+    const searchBtn = el('button', {
+        class: 'btn ghost',
+        style: {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'var(--neutral)',
+            border: '1px solid var(--neutral-deep)',
+            color: 'var(--secondary)',
+            padding: '6px 12px',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '13px',
+            marginRight: 'auto', // Pushes it away from the user menu
+            cursor: 'pointer'
+        },
+        onclick: () => {
+            // We can trigger the command palette manually
+            // The global keyboard listener will catch a synthetic Ctrl+K,
+            // but it's cleaner to just open it directly if we exposed the function.
+            // Since the palette is encapsulated, we dispatch an event.
+            window.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'k',
+                ctrlKey: true,
+                metaKey: true
+            }));
+        }
+    }, [
+        icon('search', 14),
+        el('span', { text: 'Search...' }),
+        el('kbd', { text: '⌘K', style: { marginLeft: '8px', fontSize: '10px' } })
+    ]);
+
+    header.appendChild(searchBtn);
+
     if (user) {
         const menu = el('div', { class: 'user-menu' });
 
@@ -1117,6 +1152,252 @@ const SHORTCUTS = [
                 const url = typeof dest === 'function' ? dest() : dest;
                 if (url) location.href = url;
             }
+        }
+    });
+})();
+
+// ------------------------------------------------------------------
+// Global Command Palette (Ctrl+K / Cmd+K)
+// ------------------------------------------------------------------
+
+(function setupCommandPalette() {
+    if (typeof window === 'undefined') return;
+
+    let backdropEl = null;
+    let inputEl = null;
+    let resultsEl = null;
+    let isOpen = false;
+
+    // Cache problems so we don't fetch on every keystroke
+    let allProblems = [];
+    let hasFetchedProblems = false;
+
+    // Track which item is selected via keyboard
+    let activeIndex = 0;
+    let currentFilteredItems = [];
+
+    function openPalette() {
+        if (isOpen) return;
+        isOpen = true;
+
+        buildPalette();
+        backdropEl.classList.add('visible');
+
+        // Reset state
+        inputEl.value = '';
+        activeIndex = 0;
+        renderResults('');
+
+        // Focus input after transition
+        setTimeout(() => inputEl.focus(), 50);
+
+        // Fetch problems in background if not done yet
+        if (!hasFetchedProblems) {
+            hasFetchedProblems = true;
+            Api.listProblems().then(problems => {
+                allProblems = problems;
+                // If the palette is still open and empty, re-render to show them
+                if (isOpen && inputEl.value === '') {
+                    renderResults('');
+                }
+            }).catch(err => {
+                console.warn('Command palette could not fetch problems:', err);
+            });
+        }
+    }
+
+    function closePalette() {
+        if (!isOpen) return;
+        isOpen = false;
+        backdropEl.classList.remove('visible');
+    }
+
+    function buildPalette() {
+        if (backdropEl) return;
+
+        backdropEl = el('div', {
+            class: 'palette-backdrop', onclick: (e) => {
+                if (e.target === backdropEl) closePalette();
+            }
+        });
+
+        const modal = el('div', {
+            class: 'palette-modal',
+            role: 'dialog',
+            'aria-modal': 'true'
+        });
+
+        // Search bar
+        const searchWrap = el('div', { class: 'palette-search-wrap' }, [
+            el('div', { class: 'palette-search-icon' }, [icon('search', 18)]),
+            el('input', {
+                class: 'palette-input',
+                type: 'text',
+                placeholder: 'Search problems, pages, or actions...',
+                oninput: (e) => renderResults(e.target.value),
+                onkeydown: handleInputKeydown
+            }),
+            el('span', { class: 'palette-esc-hint', text: 'ESC' })
+        ]);
+        inputEl = searchWrap.querySelector('input');
+        modal.appendChild(searchWrap);
+
+        // Results area
+        resultsEl = el('div', { class: 'palette-results' });
+        modal.appendChild(resultsEl);
+
+        backdropEl.appendChild(modal);
+        document.body.appendChild(backdropEl);
+    }
+
+    function getActions() {
+        const actions = [
+            { type: 'nav', label: 'Dashboard', href: 'dashboard.html', icon: 'grid' },
+            { type: 'nav', label: 'Problems', href: 'problems.html', icon: 'code' },
+            { type: 'nav', label: 'Submissions', href: 'history.html', icon: 'list' },
+            { type: 'nav', label: 'Leaderboard', href: 'leaderboard.html', icon: 'trophy' },
+            {
+                type: 'action', label: 'Toggle Theme', action: () => {
+                    const current = currentTheme();
+                    setTheme(current === 'light' ? 'dark' : 'light');
+                }, icon: 'moon'
+            },
+            { type: 'action', label: 'Logout', action: () => Auth.logout(), icon: 'chevron' }
+        ];
+
+        const user = Auth.getUser();
+        if (user) {
+            actions.unshift({
+                type: 'nav',
+                label: 'My Profile',
+                href: `profile.html?user=${encodeURIComponent(user.username)}`,
+                icon: 'user'
+            });
+        }
+        return actions;
+    }
+
+    function renderResults(query) {
+        const q = query.toLowerCase().trim();
+        resultsEl.innerHTML = '';
+        activeIndex = 0;
+        currentFilteredItems = [];
+
+        // 1. Filter Actions & Pages
+        const matchedActions = getActions().filter(a => a.label.toLowerCase().includes(q));
+
+        // 2. Filter Problems (limit to 5 matches to keep it snappy)
+        let matchedProblems = [];
+        if (hasFetchedProblems) {
+            matchedProblems = allProblems
+                .filter(p => p.title.toLowerCase().includes(q))
+                .slice(0, 5);
+        }
+
+        if (matchedActions.length === 0 && matchedProblems.length === 0) {
+            resultsEl.appendChild(el('div', { class: 'palette-empty', text: 'No results found.' }));
+            return;
+        }
+
+        // Render Actions
+        if (matchedActions.length > 0) {
+            resultsEl.appendChild(el('div', { class: 'palette-section-title', text: 'Navigation & Actions' }));
+            matchedActions.forEach(item => {
+                currentFilteredItems.push(item);
+                resultsEl.appendChild(buildRow(item, currentFilteredItems.length - 1));
+            });
+        }
+
+        // Render Problems
+        if (matchedProblems.length > 0) {
+            resultsEl.appendChild(el('div', { class: 'palette-section-title', text: 'Problems' }));
+            matchedProblems.forEach(p => {
+                const item = {
+                    type: 'problem',
+                    label: p.title,
+                    subtitle: p.difficulty,
+                    href: `problem.html?id=${p.id}`,
+                    icon: 'code'
+                };
+                currentFilteredItems.push(item);
+                resultsEl.appendChild(buildRow(item, currentFilteredItems.length - 1));
+            });
+        }
+
+        // Highlight the first item by default
+        updateActiveItem(0);
+    }
+
+    function buildRow(item, index) {
+        const isActive = index === activeIndex;
+        const row = el('div', {
+            class: `palette-item ${isActive ? 'active' : ''}`,
+            'data-index': index,
+            onclick: () => executeItem(item),
+            onmouseenter: () => updateActiveItem(index)
+        }, [
+            el('div', { class: 'palette-item-left' }, [
+                el('div', { class: 'palette-item-icon' }, [icon(item.icon || 'chevron', 16)]),
+                el('span', { class: 'palette-item-text', text: item.label }),
+                item.subtitle ? el('span', { class: 'palette-item-subtitle', text: `(${item.subtitle})` }) : null
+            ]),
+            item.type === 'action' ? el('div', { class: 'palette-item-shortcut' }, [el('kbd', { text: '↵' })]) : null
+        ].filter(Boolean));
+
+        return row;
+    }
+
+    function updateActiveItem(newIndex) {
+        if (newIndex < 0 || newIndex >= currentFilteredItems.length) return;
+
+        // Remove active class from old element
+        const oldActive = resultsEl.querySelector('.palette-item.active');
+        if (oldActive) oldActive.classList.remove('active');
+
+        activeIndex = newIndex;
+
+        // Add active class to new element
+        const newActive = resultsEl.querySelector(`.palette-item[data-index="${activeIndex}"]`);
+        if (newActive) {
+            newActive.classList.add('active');
+            // Scroll into view if needed
+            newActive.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    function executeItem(item) {
+        closePalette();
+        if (item.type === 'nav' || item.type === 'problem') {
+            location.href = item.href;
+        } else if (item.type === 'action') {
+            item.action();
+        }
+    }
+
+    function handleInputKeydown(e) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            updateActiveItem(activeIndex + 1);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            updateActiveItem(activeIndex - 1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (currentFilteredItems[activeIndex]) {
+                executeItem(currentFilteredItems[activeIndex]);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closePalette();
+        }
+    }
+
+    // Global listener for Cmd+K / Ctrl+K
+    window.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+            e.preventDefault(); // Prevent browser search bar
+            if (isOpen) closePalette();
+            else openPalette();
         }
     });
 })();
