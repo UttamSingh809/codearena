@@ -5,7 +5,7 @@ from .user import (
 from .problem import ProblemSummary, ProblemDetail
 from .submission import (
     SubmitRequest, SubmissionCreated, ResultDetail,
-    SubmissionDetail, SubmissionSummary, SubmissionListResponse,
+    SubmissionDetail, SubmissionSummary, SubmissionListResponse, TestCaseResult,
 )
 
 __all__ = [

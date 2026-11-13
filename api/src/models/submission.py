@@ -84,3 +84,14 @@ class SubmissionListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class TestCaseResult(BaseModel):
+    ordinal: int
+    verdict: str
+    is_sample: bool
+    input_data: Optional[str] = None
+    expected_output: Optional[str] = None
+    actual_output: Optional[str] = None
+    runtime_ms: Optional[int] = None
+    memory_kb: Optional[int] = None

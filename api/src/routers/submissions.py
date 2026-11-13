@@ -11,7 +11,7 @@ from ..config import settings
 from ..deps import CurrentUser, get_current_user
 from ..models import (
     ResultDetail, SubmissionCreated, SubmissionDetail,
-    SubmissionListResponse, SubmissionSummary, SubmitRequest,
+    SubmissionListResponse, SubmissionSummary, SubmitRequest, TestCaseResult,
 )
 
 log = logging.getLogger("api.routers.submissions")
@@ -188,3 +188,37 @@ async def list_my_submissions(
     return SubmissionListResponse(
         items=items, total=total, limit=limit, offset=offset,
     )
+
+
+@router.get("/{submission_id}/testcases", response_model=list[TestCaseResult])
+async def list_test_case_results(
+    submission_id: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Return per-test-case results for a submission."""
+    # Verify ownership
+    owner = await db.fetch_one("SELECT user_id FROM submissions WHERE id = $1", submission_id)
+    if owner is None:
+        raise HTTPException(status_code=404, detail="submission not found")
+    if user.role != "admin" and owner["user_id"] != user.id:
+        raise HTTPException(status_code=403, detail="not your submission")
+
+    rows = await db.fetch_all(
+        """
+        SELECT
+            tcr.ordinal,
+            tcr.verdict,
+            tc.is_sample,
+            tc.input_data,
+            tc.expected_output,
+            tcr.actual_output,
+            tcr.runtime_ms,
+            tcr.memory_kb
+        FROM test_case_results tcr
+        JOIN test_cases tc ON tc.id = tcr.test_case_id
+        WHERE tcr.submission_id = $1
+        ORDER BY tcr.ordinal ASC
+        """,
+        submission_id,
+    )
+    return [TestCaseResult(**dict(r)) for r in rows]
