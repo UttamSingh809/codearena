@@ -61,8 +61,27 @@
                             <option value="python">Python</option>
                         </select>
                     </div>
+                
                     <div class="editor-actions">
-                        <button id="run-btn" class="btn secondary" title="Run with custom input">▶ Run</button>
+                        <!-- NEW: IDE Tools -->
+                        <button id="toggle-minimap" class="btn ghost tool-btn" title="Toggle Minimap">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 3H3v18h18V3zM9 3v18M3 9h6M3 15h6" />
+                            </svg>
+                        </button>
+                        <button id="toggle-tabsize" class="btn ghost tool-btn" title="Toggle Tab Size">
+                            <span style="font-size: 11px; font-weight: 700;">⇥</span>
+                        </button>
+                        <button id="toggle-fullscreen" class="btn ghost tool-btn" title="Toggle Full Screen">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path
+                                    d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
+                            </svg>
+                        </button>
+
+                        <div style="width: 1px; height: 16px; background: var(--neutral-deep); margin: 0 4px;"></div>
+
+                        <button id="run-btn" class="btn secondary" title="Run with custom input (Ctrl+Enter)">Run</button>
                         <button id="clear-btn" class="btn ghost" title="Clear editor">Clear</button>
                         <button id="submit-btn" class="btn">Submit</button>
                     </div>
@@ -70,7 +89,11 @@
 
                 <!-- Editor -->
                 <div class="editor-wrap">
-                    <textarea id="source" placeholder="Write your solution here…" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                    <div id="monaco-container"></div>
+                    <textarea id="source" class="hidden" placeholder="Write your solution here…" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                    <div id="editor-fallback-note" class="muted hidden" style="padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--neutral-deep);">
+                        Monaco editor unavailable. Using basic editor fallback.
+                    </div>
                     <div class="editor-status">
                         <span id="char-count" class="muted">0 / 65536</span>
                         <span id="save-status" class="muted" aria-live="polite"></span>
@@ -124,8 +147,20 @@
     </main>
 
     <script src="static/app.js"></script>
-    <script>
+    <script type="module">
         'use strict';
+
+        import {
+            initMonaco,
+            getEditor,
+            getEditorValue,
+            setEditorValue,
+            setEditorLanguage,
+            onEditorChange,
+            updateEditorOptions,
+            focusEditor,
+            setEditorTheme
+        } from './static/editor.js';
 
         (function() {
             if (!requireAuth('problems')) return;
@@ -212,6 +247,8 @@
             const header = document.getElementById('problem-header');
             const statement = document.getElementById('statement');
             const source = document.getElementById('source');
+            const monacoContainer = document.getElementById('monaco-container');
+            const fallbackNote = document.getElementById('editor-fallback-note');
             const language = document.getElementById('language');
             const submitBtn = document.getElementById('submit-btn');
             const runBtn = document.getElementById('run-btn');
@@ -222,17 +259,9 @@
             const customStdout = document.getElementById('custom-stdout');
             const customStderr = document.getElementById('custom-stderr');
             const runRuntime = document.getElementById('run-runtime');
-
-            // Ctrl+Enter runs, Ctrl+Shift+Enter submits
-            window.addEventListener('keydown', (e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && e.shiftKey) {
-                    e.preventDefault();
-                    if (!submitBtn.disabled) submitBtn.click();
-                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (!runBtn.disabled) runBtn.click();
-                }
-            });
+            const toggleMinimapBtn = document.getElementById('toggle-minimap');
+            const toggleTabsizeBtn = document.getElementById('toggle-tabsize');
+            const toggleFullscreenBtn = document.getElementById('toggle-fullscreen');
             const clearBtn = document.getElementById('clear-btn');
             const submitStat = document.getElementById('submit-status');
             const charCount = document.getElementById('char-count');
@@ -248,21 +277,47 @@
             }
 
             // ---- Persistent language + draft ---------------------------------
-
             const savedLang = localStorage.getItem('codearena_lang');
             if (savedLang) language.value = savedLang;
-            language.addEventListener('change', () => {
-                localStorage.setItem('codearena_lang', language.value);
-            });
 
             const draftKey = 'codearena_source_' + problemId;
-            const savedDraft = localStorage.getItem(draftKey);
-            source.value = savedDraft || '';
-            updateCharCount(source.value);
-            if (savedDraft !== null) updateSaveStatus(navigator.onLine ? 'saved' : 'offline');
+            const savedDraft = localStorage.getItem(draftKey) || '';
+            source.value = savedDraft;
 
             let draftTimer = null;
-            let draftSaved = savedDraft !== null;
+            let draftSaved = savedDraft !== null && localStorage.getItem(draftKey) !== null;
+            let monacoReady = false;
+
+            function getSourceValue() {
+                return monacoReady ? getEditorValue() : (source ? source.value : '');
+            }
+
+            function setSourceValue(value) {
+                const v = value ?? '';
+                if (source) source.value = v;
+                if (monacoReady) setEditorValue(v);
+            }
+
+            function focusSource() {
+                if (monacoReady) focusEditor();
+                else if (source) source.focus();
+            }
+
+            function updateCharCount(value = getSourceValue()) {
+                charCount.textContent = `${value.length} / 65536`;
+            }
+
+            function updateSaveStatus(state) {
+                const states = {
+                    saving: ['Saving…', 'var(--secondary)'],
+                    saved: ['Saved', 'var(--success)'],
+                    offline: ['Saved offline', 'var(--warning)'],
+                    error: ['Could not save draft', 'var(--danger)'],
+                };
+                const [text, color] = states[state] || ['', ''];
+                saveStatus.textContent = text;
+                saveStatus.style.color = color;
+            }
 
             function persistDraft(value, state) {
                 try {
@@ -285,115 +340,258 @@
                 }, 300);
             }
 
+            function onSourceChanged(value = getSourceValue()) {
+                if (source) source.value = value;
+                updateCharCount(value);
+                scheduleDraftSave(value);
+            }
+
+            updateCharCount(savedDraft);
+            if (localStorage.getItem(draftKey) !== null) {
+                updateSaveStatus(navigator.onLine ? 'saved' : 'offline');
+            }
+
             source.addEventListener('input', () => {
-                updateCharCount(source.value);
-                scheduleDraftSave(source.value);
+                if (!monacoReady) onSourceChanged(source.value);
             });
 
             window.addEventListener('offline', () => {
                 if (draftTimer) clearTimeout(draftTimer);
                 draftTimer = null;
-                persistDraft(source.value, 'offline');
+                persistDraft(getSourceValue(), 'offline');
             });
             window.addEventListener('online', () => {
                 if (draftSaved && !draftTimer) updateSaveStatus('saved');
             });
 
-            // Tab key inserts 4 spaces instead of moving focus
+            // ---- IDE Layout Tools ----
+            let minimapEnabled = localStorage.getItem('codearena_minimap') === 'true';
+            let tabSize = parseInt(localStorage.getItem('codearena_tabsize') || '4', 10);
+
+            function applyEditorPreferences() {
+                if (!monacoReady) return;
+                updateEditorOptions({
+                    minimap: {
+                        enabled: minimapEnabled,
+                        side: 'right',
+                        size: 'proportional',
+                        showSlider: 'mouseover'
+                    },
+                    tabSize: tabSize
+                });
+                const editor = getEditor();
+                if (editor) editor.layout();
+            }
+
+            if (toggleMinimapBtn) {
+                toggleMinimapBtn.classList.toggle('active', minimapEnabled);
+                toggleMinimapBtn.addEventListener('click', () => {
+                    minimapEnabled = !minimapEnabled;
+                    localStorage.setItem('codearena_minimap', minimapEnabled);
+                    toggleMinimapBtn.classList.toggle('active', minimapEnabled);
+
+                    if (!monacoReady) {
+                        toast('Minimap is available only when Monaco editor is enabled', 'info');
+                        return;
+                    }
+
+                    updateEditorOptions({
+                        minimap: {
+                            enabled: minimapEnabled,
+                            side: 'right',
+                            size: 'proportional',
+                            showSlider: 'mouseover'
+                        }
+                    });
+                    const editor = getEditor();
+                    if (editor) setTimeout(() => editor.layout(), 10);
+                });
+            }
+
+            if (toggleTabsizeBtn) {
+                toggleTabsizeBtn.textContent = `⇥ ${tabSize}`;
+                toggleTabsizeBtn.addEventListener('click', () => {
+                    tabSize = tabSize === 4 ? 2 : 4;
+                    localStorage.setItem('codearena_tabsize', tabSize);
+                    toggleTabsizeBtn.textContent = `⇥ ${tabSize}`;
+                    if (monacoReady) {
+                        updateEditorOptions({ tabSize: tabSize });
+                    }
+                });
+            }
+
+            if (toggleFullscreenBtn) {
+                if (localStorage.getItem('codearena_fullscreen') === 'true') {
+                    document.body.classList.add('editor-fullscreen');
+                    toggleFullscreenBtn.classList.add('active');
+                }
+
+                toggleFullscreenBtn.addEventListener('click', () => {
+                    const isFullscreen = document.body.classList.toggle('editor-fullscreen');
+                    localStorage.setItem('codearena_fullscreen', isFullscreen);
+                    toggleFullscreenBtn.classList.toggle('active', isFullscreen);
+                    if (monacoReady) {
+                        const editor = getEditor();
+                        if (editor) setTimeout(() => editor.layout(), 50);
+                    }
+                });
+            }
+
+            // Handle Escape key to exit full screen
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.body.classList.contains('editor-fullscreen') && toggleFullscreenBtn) {
+                    toggleFullscreenBtn.click();
+                }
+            });
+
+            // Ctrl+Enter runs, Ctrl+Shift+Enter submits
+            window.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && e.shiftKey) {
+                    e.preventDefault();
+                    if (submitBtn && !submitBtn.disabled) submitBtn.click();
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (runBtn && !runBtn.disabled) runBtn.click();
+                }
+            });
+
+            // Fallback textarea Tab key inserts spaces based on selected tab size
             source.addEventListener('keydown', e => {
+                if (monacoReady) return;
                 if (e.key === 'Tab' && !e.shiftKey) {
                     e.preventDefault();
                     const start = source.selectionStart;
                     const end = source.selectionEnd;
-                    source.value = source.value.slice(0, start) + '    ' + source.value.slice(end);
-                    source.selectionStart = source.selectionEnd = start + 4;
-                    updateCharCount(source.value);
-                    scheduleDraftSave(source.value);
+                    const indent = ' '.repeat(tabSize);
+                    source.value = source.value.slice(0, start) + indent + source.value.slice(end);
+                    source.selectionStart = source.selectionEnd = start + indent.length;
+                    onSourceChanged(source.value);
                 }
             });
 
-            function updateCharCount(value = source.value) {
-                charCount.textContent = `${value.length} / 65536`;
-            }
-
-            function updateSaveStatus(state) {
-                const states = {
-                    saving: ['Saving…', 'var(--secondary)'],
-                    saved: ['Saved', 'var(--success)'],
-                    offline: ['Saved offline', 'var(--warning)'],
-                    error: ['Could not save draft', 'var(--danger)'],
-                };
-                const [text, color] = states[state] || ['', ''];
-                saveStatus.textContent = text;
-                saveStatus.style.color = color;
-            }
+            language.addEventListener('change', () => {
+                localStorage.setItem('codearena_lang', language.value);
+                if (monacoReady) setEditorLanguage(language.value);
+            });
 
             clearBtn.addEventListener('click', () => {
-                if (source.value && !confirm('Clear the editor?')) return;
-                source.value = '';
+                const current = getSourceValue();
+                if (current && !confirm('Clear the editor?')) return;
+                setSourceValue('');
                 localStorage.removeItem(draftKey);
                 if (draftTimer) clearTimeout(draftTimer);
                 draftTimer = null;
                 draftSaved = false;
-                updateCharCount();
+                updateCharCount('');
                 updateSaveStatus('');
+                focusSource();
             });
 
-            closeRunBtn.addEventListener('click', () => {
-                customRunPanel.classList.add('hidden');
-            });
+            if (closeRunBtn) {
+                closeRunBtn.addEventListener('click', () => {
+                    if (customRunPanel) customRunPanel.classList.add('hidden');
+                });
+            }
 
-            runBtn.addEventListener('click', async () => {
-                const sourceCode = source.value;
-                if (!sourceCode.trim()) {
-                    toast('Source code is empty', 'warn');
-                    source.focus();
-                    return;
-                }
+            if (runBtn) {
+                runBtn.addEventListener('click', async () => {
+                    const sourceCode = getSourceValue();
+                    if (!sourceCode.trim()) {
+                        toast('Source code is empty', 'warn');
+                        focusSource();
+                        return;
+                    }
 
-                runBtn.disabled = true;
-                runBtn.textContent = '⏳ Running...';
-                customRunPanel.classList.remove('hidden');
-                customOutputArea.classList.add('hidden');
+                    runBtn.disabled = true;
+                    runBtn.textContent = '⏳ Running...';
+                    if (customRunPanel) customRunPanel.classList.remove('hidden');
+                    if (customOutputArea) customOutputArea.classList.add('hidden');
 
+                    try {
+                        const res = await apiFetch('/api/run', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                language: language.value,
+                                source_code: sourceCode,
+                                stdin: customStdin ? customStdin.value : ''
+                            })
+                        });
+
+                        if (customOutputArea) customOutputArea.classList.remove('hidden');
+
+                        if (res.timed_out) {
+                            if (runRuntime) {
+                                runRuntime.textContent = 'Time Limit Exceeded';
+                                runRuntime.style.color = 'var(--warning)';
+                            }
+                        } else {
+                            if (runRuntime) {
+                                runRuntime.textContent = `${res.runtime_ms} ms`;
+                                runRuntime.style.color = 'var(--secondary)';
+                            }
+                        }
+
+                        if (customStdout) customStdout.textContent = res.stdout || '(no output)';
+                        if (customStderr) {
+                            if (res.stderr) {
+                                customStderr.textContent = res.stderr;
+                                customStderr.classList.remove('hidden');
+                            } else {
+                                customStderr.classList.add('hidden');
+                            }
+                        }
+
+                    } catch (err) {
+                        toast(err.message || 'Run failed', 'error');
+                    } finally {
+                        runBtn.disabled = false;
+                        runBtn.textContent = 'Run';
+                    }
+                });
+            }
+
+            // ---- Load Monaco editor -----------------------------------------
+            (async () => {
                 try {
-                    const res = await apiFetch('/api/run', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            language: language.value,
-                            source_code: sourceCode,
-                            stdin: customStdin.value
-                        })
+                    await initMonaco(language.value, savedDraft);
+                    monacoReady = true;
+                    if (monacoContainer) monacoContainer.classList.remove('hidden');
+                    if (source) source.classList.add('hidden');
+                    if (fallbackNote) fallbackNote.classList.add('hidden');
+
+                    const theme = document.documentElement.dataset.theme || 'light';
+                    setEditorTheme(theme);
+
+                    if (!window.__codearenaMonacoThemeObserver) {
+                        window.__codearenaMonacoThemeObserver = new MutationObserver(() => {
+                            setEditorTheme(document.documentElement.dataset.theme || 'light');
+                        });
+                        window.__codearenaMonacoThemeObserver.observe(document.documentElement, {
+                            attributes: true,
+                            attributeFilter: ['data-theme']
+                        });
+                    }
+
+                    onEditorChange((value) => {
+                        if (source) source.value = value;
+                        updateCharCount(value);
+                        scheduleDraftSave(value);
                     });
 
-                    customOutputArea.classList.remove('hidden');
-
-                    if (res.timed_out) {
-                        runRuntime.textContent = 'Time Limit Exceeded';
-                        runRuntime.style.color = 'var(--warning)';
-                    } else {
-                        runRuntime.textContent = `${res.runtime_ms} ms`;
-                        runRuntime.style.color = 'var(--secondary)';
-                    }
-
-                    customStdout.textContent = res.stdout || '(no output)';
-                    if (res.stderr) {
-                        customStderr.textContent = res.stderr;
-                        customStderr.classList.remove('hidden');
-                    } else {
-                        customStderr.classList.add('hidden');
-                    }
-
+                    applyEditorPreferences();
+                    updateCharCount(getSourceValue());
                 } catch (err) {
-                    toast(err.message || 'Run failed', 'error');
-                } finally {
-                    runBtn.disabled = false;
-                    runBtn.textContent = '▶ Run';
+                    console.warn('Monaco failed to initialize, using textarea fallback:', err);
+                    monacoReady = false;
+                    if (monacoContainer) monacoContainer.classList.add('hidden');
+                    if (source) source.classList.remove('hidden');
+                    if (fallbackNote) fallbackNote.classList.remove('hidden');
+                    source.value = savedDraft;
+                    updateCharCount(source.value);
                 }
-            });
+            })();
 
             // ---- Load the problem -------------------------------------------
-
             (async() => {
                 // 6. Render Skeleton immediately for the left pane
                 header.innerHTML = `
@@ -482,15 +680,15 @@
             }
 
             // ---- Submit ------------------------------------------------------
-
             submitBtn.addEventListener('click', async() => {
                 if (!navigator.onLine) {
                     toast('You are offline. Please reconnect to submit.', 'warn');
                     return;
                 }
-                if (!source.value.trim()) {
+                const sourceCode = getSourceValue();
+                if (!sourceCode.trim()) {
                     toast('Source code is empty', 'warn');
-                    source.focus();
+                    focusSource();
                     return;
                 }
 
@@ -503,7 +701,7 @@
                 submitStat.appendChild(document.createTextNode(' Submitting'));
 
                 try {
-                    const r = await Api.submit(problemId, language.value, source.value);
+                    const r = await Api.submit(problemId, language.value, sourceCode);
                     try {
                         localStorage.setItem('codearena_lang', language.value);
                     } catch (storageError) {

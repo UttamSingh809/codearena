@@ -3061,3 +3061,71 @@ a.onboarding-step:hover {
     max-height: 200px;
     overflow-y: auto;
 }
+
+/* ============================================================
+ * Professional Editor Layout
+ * ============================================================ */
+
+/* Small square buttons for the IDE toolbar */
+.tool-btn {
+    padding: 4px 6px !important;
+    min-width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--secondary);
+    transition: all 0.15s;
+}
+
+.tool-btn:hover,
+.tool-btn.active {
+    color: var(--primary);
+    background: var(--neutral-deep);
+}
+
+/* Full Screen Mode */
+body.editor-fullscreen main.problem-layout {
+    grid-template-columns: 1fr !important;
+    padding: 16px;
+    gap: 0;
+}
+
+body.editor-fullscreen #left-pane,
+body.editor-fullscreen .split-handle,
+body.editor-fullscreen .breadcrumb {
+    display: none !important;
+}
+
+body.editor-fullscreen #right-pane {
+    position: fixed;
+    top: 68px;
+    /* Height of header */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    background: var(--neutral);
+    padding: 16px;
+    max-width: none;
+    height: calc(100vh - 68px);
+    overflow: hidden;
+}
+
+body.editor-fullscreen .editor-inner {
+    max-height: 100%;
+    height: 100%;
+}
+
+body.editor-fullscreen #monaco-container {
+    height: calc(100vh - 220px);
+    /* Subtract header, toolbar, and status bar */
+    min-height: 0;
+}
+
+/* Change the fullscreen icon when active */
+body.editor-fullscreen #toggle-fullscreen {
+    color: var(--tertiary);
+    background: var(--tertiary-dim);
+}

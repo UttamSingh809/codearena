@@ -2,51 +2,157 @@
 let editorInstance = null;
 let monacoInstance = null;
 let changeSubscription = null;
+let monacoLoadPromise = null;
 
-/**
- * Initialize Monaco Editor using monaco-esm.
- * Works in a browser without a bundler.
- */
-export async function initMonaco(initialLanguage = "c", initialValue = "") {
-    const [core, editorWorkerModule] = await Promise.all([
-        import("https://esm.sh/monaco-esm@2.0.1"),
-        import("https://esm.sh/monaco-esm@2.0.1/workers/editor")
-    ]);
+let themesDefined = false;
 
-    const {
-        monaco,
-        loadCss,
-        initMonaco: configureMonaco
-    } = core;
+function defineEditorThemes(monaco) {
+    if (themesDefined) return;
 
-    const editorWorker = editorWorkerModule.default;
-
-    if (typeof editorWorker !== "function") {
-        throw new Error("Monaco editor worker constructor was not exported correctly.");
-    }
-
-    configureMonaco({
-        workers: {
-            editor: editorWorker
+    monaco.editor.defineTheme("codearena-light", {
+        base: "vs",
+        inherit: true,
+        rules: [
+            { token: "", foreground: "2B1014", background: "FFFFFF" },
+            { token: "comment", foreground: "936668", fontStyle: "italic" },
+            { token: "keyword", foreground: "E84B55" },
+            { token: "string", foreground: "2F7D4F" },
+            { token: "number", foreground: "9A6A1C" },
+            { token: "type", foreground: "A86B34" },
+            { token: "function", foreground: "B3352E" }
+        ],
+        colors: {
+            "editor.background": "#FFFFFF",
+            "editor.foreground": "#2B1014",
+            "editorLineNumber.foreground": "#936668",
+            "editorLineNumber.activeForeground": "#2B1014",
+            "editorCursor.foreground": "#E84B55",
+            "editor.selectionBackground": "#E84B5533",
+            "editor.inactiveSelectionBackground": "#E84B551F",
+            "editor.lineHighlightBackground": "#FBEDE8",
+            "editor.lineHighlightBorder": "#00000000",
+            "editorIndentGuide.background1": "#F3DED6",
+            "editorIndentGuide.activeBackground1": "#93666866",
+            "editorGutter.background": "#FFFFFF",
+            "editorWidget.background": "#FFFFFF",
+            "editorWidget.border": "#F3DED6",
+            "scrollbarSlider.background": "#93666833",
+            "scrollbarSlider.hoverBackground": "#93666855",
+            "scrollbarSlider.activeBackground": "#93666877",
+            "minimap.background": "#FFFFFF"
         }
     });
 
-    loadCss();
+    monaco.editor.defineTheme("codearena-dark", {
+        base: "vs-dark",
+        inherit: true,
+        rules: [
+            { token: "", foreground: "FBEDE8", background: "23181C" },
+            { token: "comment", foreground: "B08F8C", fontStyle: "italic" },
+            { token: "keyword", foreground: "F26A73" },
+            { token: "string", foreground: "5FD68E" },
+            { token: "number", foreground: "F0C060" },
+            { token: "type", foreground: "C08A4D" },
+            { token: "function", foreground: "FF7B72" }
+        ],
+        colors: {
+            "editor.background": "#23181C",
+            "editor.foreground": "#FBEDE8",
+            "editorLineNumber.foreground": "#B08F8C",
+            "editorLineNumber.activeForeground": "#FBEDE8",
+            "editorCursor.foreground": "#E84B55",
+            "editor.selectionBackground": "#E84B5544",
+            "editor.inactiveSelectionBackground": "#E84B5526",
+            "editor.lineHighlightBackground": "#2D2025",
+            "editor.lineHighlightBorder": "#00000000",
+            "editorIndentGuide.background1": "#2D2025",
+            "editorIndentGuide.activeBackground1": "#B08F8C66",
+            "editorGutter.background": "#23181C",
+            "editorWidget.background": "#23181C",
+            "editorWidget.border": "#2D2025",
+            "scrollbarSlider.background": "#B08F8C33",
+            "scrollbarSlider.hoverBackground": "#B08F8C55",
+            "scrollbarSlider.activeBackground": "#B08F8C77",
+            "minimap.background": "#23181C"
+        }
+    });
 
+    themesDefined = true;
+}
+
+function loadMonaco() {
+    if (monacoInstance) return Promise.resolve(monacoInstance);
+    if (monacoLoadPromise) return monacoLoadPromise;
+
+    monacoLoadPromise = new Promise((resolve, reject) => {
+        if (window.monaco && window.monaco.editor) {
+            monacoInstance = window.monaco;
+            defineEditorThemes(monacoInstance);
+            resolve(monacoInstance);
+            return;
+        }
+
+        const base = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.2/min";
+
+        function onAmdReady() {
+            try {
+                window.require.config({ paths: { vs: `${base}/vs` } });
+                window.MonacoEnvironment = {
+                    getWorkerUrl: function () {
+                        const proxy = `
+                            self.MonacoEnvironment = { baseUrl: '${base}/' };
+                            importScripts('${base}/vs/base/worker/workerMain.min.js');
+                        `;
+                        return `data:text/javascript;charset=utf-8,${encodeURIComponent(proxy)}`;
+                    }
+                };
+                window.require(["vs/editor/editor.main"], () => {
+                    monacoInstance = window.monaco;
+                    defineEditorThemes(monacoInstance);
+                    resolve(monacoInstance);
+                }, reject);
+            } catch (e) {
+                reject(e);
+            }
+        }
+
+        if (window.require && window.require.config) {
+            onAmdReady();
+            return;
+        }
+
+        const script = document.createElement("script");
+        script.src = `${base}/vs/loader.min.js`;
+        script.async = true;
+        script.onload = onAmdReady;
+        script.onerror = () => reject(new Error("Failed to load Monaco loader"));
+        document.head.appendChild(script);
+    });
+
+    return monacoLoadPromise;
+}
+
+/**
+ * Initialize Monaco Editor using Monaco's AMD loader (CDN).
+ * Works in a browser without a bundler.
+ */
+export async function initMonaco(initialLanguage = "c", initialValue = "") {
+    if (editorInstance) return editorInstance;
+
+    const monaco = await loadMonaco();
     const container = document.getElementById("monaco-container");
-
     if (!container) {
-        throw new Error(
-            "Monaco container #monaco-container was not found."
-        );
+        throw new Error("Monaco container #monaco-container was not found.");
     }
 
-    monacoInstance = monaco;
+    const initialTheme = (document.documentElement.dataset.theme === "dark")
+        ? "codearena-dark"
+        : "codearena-light";
 
     editorInstance = monaco.editor.create(container, {
         value: initialValue || "",
         language: initialLanguage || "c",
-        theme: "vs-dark",
+        theme: initialTheme,
 
         // Layout
         automaticLayout: true,
@@ -61,19 +167,19 @@ export async function initMonaco(initialLanguage = "c", initialValue = "") {
         fontSize: 14,
         lineHeight: 22,
         fontFamily: "Consolas, 'Courier New', monospace",
-        fontLigatures: true,
+        fontLigatures: false,
 
         // Editing
         tabSize: 4,
         insertSpaces: true,
         autoIndent: "full",
-        formatOnPaste: true,
-        formatOnType: true,
+        formatOnPaste: false,
+        formatOnType: false,
 
         // Suggestions
-        quickSuggestions: true,
-        suggestOnTriggerCharacters: true,
-        acceptSuggestionOnEnter: "on",
+        quickSuggestions: false,
+        suggestOnTriggerCharacters: false,
+        acceptSuggestionOnEnter: "off",
 
         // Visual features
         minimap: {
@@ -207,10 +313,21 @@ export function disposeEditor() {
 }
 
 /**
- * Change the Monaco editor theme.
- * Uses 'vs-dark' for dark mode and 'vs' for light mode.
+ * Update specific Monaco editor options at runtime.
+ * @param {object} options - e.g. { minimap: { enabled: true }, tabSize: 2 }
+ */
+export function updateEditorOptions(options) {
+    if (editorInstance) {
+        editorInstance.updateOptions(options);
+    }
+}
+
+/**
+ * Change the Monaco editor theme to match site theme.
  */
 export function setEditorTheme(theme) {
-    if (!editorInstance || !monacoInstance) return;
-    monacoInstance.editor.setTheme(theme === 'dark' ? 'vs-dark' : 'vs');
+    if (!monacoInstance) return;
+    defineEditorThemes(monacoInstance);
+    const name = (theme === "dark") ? "codearena-dark" : "codearena-light";
+    monacoInstance.editor.setTheme(name);
 }
