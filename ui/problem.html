@@ -41,6 +41,27 @@
         <section class="problem-statement" id="left-pane">
             <div id="problem-header" class="mb-24"></div>
             <div id="statement"></div>
+
+            <!-- Discussions -->
+            <div id="discussions-container" class="discussion-section hidden">
+                <div class="discussion-header">
+                    <h3 style="margin: 0; font-family: var(--font-sans); font-size: 1.1rem; text-transform: none; letter-spacing: normal;">Discussion</h3>
+                </div>
+
+                <div class="comment-box">
+                    <div class="avatar" style="width: 32px; height: 32px; font-size: 14px; background: var(--tertiary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" id="current-user-avatar"></div>
+                    <div style="flex: 1;">
+                        <textarea id="new-comment-text" placeholder="Share a hint, ask a question, or explain your approach..." maxlength="2000"></textarea>
+                        <div style="text-align: right; margin-top: 8px;">
+                            <button id="post-comment-btn" class="btn" style="padding: 6px 16px; font-size: 13px;">Post Comment</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="comments-list">
+                    <p class="muted">Loading discussion...</p>
+                </div>
+            </div>
         </section>
 
         <!-- DRAG HANDLE -->
@@ -940,6 +961,179 @@
                     if (typeof toast === 'function') toast('Snippet saved!', 'success');
                 };
             }
+
+            // ---- Discussions ----
+            const discussionsContainer = document.getElementById('discussions-container');
+            const commentsList = document.getElementById('comments-list');
+            const newCommentText = document.getElementById('new-comment-text');
+            const postCommentBtn = document.getElementById('post-comment-btn');
+            const currentUserAvatar = document.getElementById('current-user-avatar');
+
+            const currentUser = Auth.getUser();
+            if (currentUser && currentUserAvatar) {
+                const initial = (currentUser.username || '?').charAt(0).toUpperCase();
+                if (currentUser.avatar_url) {
+                    currentUserAvatar.style.backgroundImage = `url(${currentUser.avatar_url})`;
+                    currentUserAvatar.style.backgroundSize = 'cover';
+                    currentUserAvatar.style.color = 'transparent';
+                    currentUserAvatar.textContent = '';
+                } else {
+                    currentUserAvatar.textContent = initial;
+                }
+            }
+
+            async function loadComments() {
+                try {
+                    const comments = await apiFetch(`/api/discussions/problem/${problemId}`);
+                    renderComments(comments);
+                    if (discussionsContainer) discussionsContainer.classList.remove('hidden');
+                } catch (err) {
+                    console.error('Failed to load comments', err);
+                }
+            }
+
+            function renderComments(comments) {
+                if (!commentsList) return;
+                clear(commentsList);
+
+                // Group by parent_id (top-level vs replies)
+                const topLevel = comments.filter(c => !c.parent_id);
+                const replies = comments.filter(c => c.parent_id);
+
+                if (topLevel.length === 0) {
+                    commentsList.innerHTML = '<p class="muted" style="font-size: 14px;">No comments yet. Be the first to start the discussion!</p>';
+                    return;
+                }
+
+                topLevel.forEach(c => {
+                    const cEl = buildCommentEl(c, false);
+
+                    // Attach replies
+                    const cReplies = replies.filter(r => r.parent_id === c.id);
+                    if (cReplies.length > 0) {
+                        const repliesEl = el('div', { class: 'replies' });
+                        cReplies.forEach(r => repliesEl.appendChild(buildCommentEl(r, true)));
+                        cEl.querySelector('.comment-content').appendChild(repliesEl);
+                    }
+
+                    commentsList.appendChild(cEl);
+                });
+            }
+
+            function buildCommentEl(c, isReply) {
+                const hasUpvoted = c.has_upvoted;
+
+                const wrapper = el('div', { class: 'comment' });
+
+                // Votes column
+                const votesCol = el('div', { class: 'comment-votes' });
+                const voteBtn = el('button', {
+                    class: `vote-btn ${hasUpvoted ? 'active' : ''}`,
+                    onclick: async (e) => {
+                        const btn = e.currentTarget;
+                        btn.disabled = true;
+                        try {
+                            await apiFetch(`/api/discussions/${c.id}/upvote`, { method: 'POST' });
+                            loadComments(); // reload to get new count
+                        } catch (err) {
+                            toast('Failed to upvote', 'error');
+                            btn.disabled = false;
+                        }
+                    }
+                }, [
+                    // Upvote arrow SVG
+                    (() => {
+                        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                        svg.setAttribute('width', '16'); svg.setAttribute('height', '16');
+                        svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none');
+                        svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '2');
+                        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        p.setAttribute('d', 'M12 4l-8 8h6v8h4v-8h6z');
+                        svg.appendChild(p);
+                        return svg;
+                    })()
+                ]);
+                votesCol.appendChild(voteBtn);
+                votesCol.appendChild(el('div', { class: 'vote-count', text: String(c.upvotes) }));
+                wrapper.appendChild(votesCol);
+
+                // Content area
+                const contentArea = el('div', { class: 'comment-content' });
+
+                const meta = el('div', { class: 'comment-meta' }, [
+                    el('a', { href: `profile.html?user=${encodeURIComponent(c.username)}`, class: 'comment-author', text: c.username }),
+                    el('span', { text: '•' }),
+                    el('span', { text: formatDate(c.created_at) })
+                ]);
+                contentArea.appendChild(meta);
+
+                contentArea.appendChild(el('div', { class: 'comment-text', text: c.content }));
+
+                if (!isReply) {
+                    const actions = el('div', { class: 'comment-actions' });
+                    const replyBtn = el('button', { class: 'comment-action-btn', text: 'Reply' });
+
+                    const replyForm = el('div', { class: 'reply-form' }, [
+                        el('div', { class: 'comment-box', style: { marginBottom: '0', marginTop: '8px', padding: '8px' } }, [
+                            el('textarea', { placeholder: `Reply to ${c.username}...`, style: { minHeight: '40px' } }),
+                            el('div', { style: { textAlign: 'right', marginTop: '4px' } }, [
+                                el('button', { class: 'btn secondary', text: 'Cancel', style: { padding: '2px 8px', fontSize: '11px', marginRight: '8px' }, onclick: () => replyForm.classList.remove('visible') }),
+                                el('button', { class: 'btn', text: 'Post Reply', style: { padding: '2px 8px', fontSize: '11px' }, onclick: async () => {
+                                    const text = replyForm.querySelector('textarea').value;
+                                    if (!text.trim()) return;
+                                    try {
+                                        await apiFetch('/api/discussions', {
+                                            method: 'POST',
+                                            body: JSON.stringify({ problem_id: problemId, parent_id: c.id, content: text })
+                                        });
+                                        loadComments();
+                                    } catch (err) {
+                                        toast('Failed to reply', 'error');
+                                    }
+                                }})
+                            ])
+                        ])
+                    ]);
+
+                    replyBtn.onclick = () => {
+                        replyForm.classList.toggle('visible');
+                        if (replyForm.classList.contains('visible')) {
+                            replyForm.querySelector('textarea').focus();
+                        }
+                    };
+
+                    actions.appendChild(replyBtn);
+                    contentArea.appendChild(actions);
+                    contentArea.appendChild(replyForm);
+                }
+
+                wrapper.appendChild(contentArea);
+                return wrapper;
+            }
+
+            if (postCommentBtn) {
+                postCommentBtn.addEventListener('click', async () => {
+                    const content = newCommentText ? newCommentText.value.trim() : '';
+                    if (!content) return;
+                    postCommentBtn.disabled = true;
+                    try {
+                        await apiFetch('/api/discussions', {
+                            method: 'POST',
+                            body: JSON.stringify({ problem_id: problemId, content: content })
+                        });
+                        if (newCommentText) newCommentText.value = '';
+                        toast('Comment posted', 'success');
+                        loadComments();
+                    } catch (err) {
+                        toast(err.message || 'Failed to post comment', 'error');
+                    } finally {
+                        postCommentBtn.disabled = false;
+                    }
+                });
+            }
+
+            // Trigger loading of comments after problem is loaded
+            loadComments();
         })();
     </script>
 
