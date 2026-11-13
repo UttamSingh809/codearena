@@ -91,6 +91,9 @@
             if (new URLSearchParams(location.search).get('expired')) {
                 toast('Your session expired. Please log in again.', 'warn');
             }
+            if (new URLSearchParams(location.search).get('banned')) {
+                toast('Your account has been suspended. Please contact an administrator.', 'error', 10000);
+            }
             if (Auth.isLoggedIn()) { location.href = 'dashboard.html'; return; }
 
             const loginTab = document.getElementById('tab-login');

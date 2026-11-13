@@ -24,12 +24,13 @@ _bearer = HTTPBearer(auto_error=False)
 class CurrentUser:
     """Simple container for the authenticated user's identity."""
 
-    __slots__ = ("id", "username", "role")
+    __slots__ = ("id", "username", "role", "is_banned")
 
-    def __init__(self, id: int, username: str, role: str):
+    def __init__(self, id: int, username: str, role: str, is_banned: bool = False):
         self.id = id
         self.username = username
         self.role = role
+        self.is_banned = is_banned
 
 
 async def get_current_user(
@@ -64,7 +65,7 @@ async def get_current_user(
 
     user_id = int(sub)
     row = await db.fetch_one(
-        "SELECT id, username, role FROM users WHERE id = $1",
+        "SELECT id, username, role, is_banned FROM users WHERE id = $1",
         user_id,
     )
     if row is None:
@@ -73,7 +74,19 @@ async def get_current_user(
             detail="user no longer exists",
         )
 
-    return CurrentUser(id=row["id"], username=row["username"], role=row["role"])
+    # Reject banned users
+    if row["is_banned"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been suspended.",
+        )
+
+    return CurrentUser(
+        id=row["id"],
+        username=row["username"],
+        role=row["role"],
+        is_banned=row["is_banned"],
+    )
 
 
 async def require_admin(

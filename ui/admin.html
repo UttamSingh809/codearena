@@ -117,43 +117,89 @@
             // ---- Load User Management ----
             async function loadUsers(elClicked) {
                 setActiveNav(elClicked);
-                content.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading users…</span></div>`;
+                content.innerHTML = '';
 
-                try {
-                    const users = await apiFetch('/api/admin/users');
+                content.appendChild(el('h1', { text: 'User Management', style: { marginBottom: '24px' } }));
 
-                    content.innerHTML = '';
-                    content.appendChild(el('h1', { text: 'User Management', style: { marginBottom: '24px' } }));
+                // Search bar
+                const searchBar = el('div', { class: 'filter-bar' }, [
+                    el('input', { type: 'search', id: 'admin-user-search', placeholder: 'Search by username or email...' }),
+                    el('button', { class: 'btn secondary', text: 'Search', onclick: () => fetchUsers() })
+                ]);
+                content.appendChild(searchBar);
 
-                    const table = el('table');
-                    table.appendChild(el('thead', {}, [
-                        el('tr', {}, [
-                            el('th', { text: 'ID' }),
-                            el('th', { text: 'Username' }),
-                            el('th', { text: 'Email' }),
-                            el('th', { text: 'Role' }),
-                            el('th', { text: 'XP' }),
-                            el('th', { text: 'Joined' })
-                        ])
-                    ]));
+                const tableContainer = el('div', { id: 'admin-users-table' });
+                content.appendChild(tableContainer);
 
-                    const tbody = el('tbody');
-                    users.forEach(u => {
-                        tbody.appendChild(el('tr', {}, [
-                            el('td', { class: 'mono muted', text: String(u.id) }),
-                            el('td', { text: u.username }),
-                            el('td', { class: 'muted', text: u.email }),
-                            el('td', {}, [el('span', { class: `badge ${u.role === 'admin' ? 'AC' : 'PENDING'}`, text: u.role })]),
-                            el('td', { class: 'num', text: String(u.xp ?? 0) }),
-                            el('td', { class: 'muted', text: formatDate(u.created_at) })
+                async function fetchUsers() {
+                    const q = document.getElementById('admin-user-search').value.trim();
+                    const url = q ? `/api/admin/users?search=${encodeURIComponent(q)}` : '/api/admin/users';
+
+                    tableContainer.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading users…</span></div>`;
+
+                    try {
+                        const users = await apiFetch(url);
+                        tableContainer.innerHTML = '';
+
+                        if (users.length === 0) {
+                            tableContainer.appendChild(el('p', { class: 'muted', text: 'No users found.' }));
+                            return;
+                        }
+
+                        const table = el('table');
+                        table.appendChild(el('thead', {}, [
+                            el('tr', {}, [
+                                el('th', { text: 'ID' }),
+                                el('th', { text: 'Username' }),
+                                el('th', { text: 'Email' }),
+                                el('th', { text: 'Role' }),
+                                el('th', { text: 'XP' }),
+                                el('th', { text: 'Actions' })
+                            ])
                         ]));
-                    });
-                    table.appendChild(tbody);
 
-                    content.appendChild(el('div', { class: 'table-wrap' }, [table]));
-                } catch (err) {
-                    toast(err.message || 'Failed to load users', 'error');
+                        const tbody = el('tbody');
+                        users.forEach(u => {
+                            const isBanned = u.is_banned;
+
+                            tbody.appendChild(el('tr', {}, [
+                                el('td', { class: 'mono muted', text: String(u.id) }),
+                                el('td', {
+                                    text: u.username,
+                                    style: { color: isBanned ? 'var(--danger)' : 'inherit', textDecoration: isBanned ? 'line-through' : 'none' }
+                                }),
+                                el('td', { class: 'muted', text: u.email }),
+                                el('td', {}, [el('span', { class: `badge ${u.role === 'admin' ? 'AC' : 'PENDING'}`, text: u.role })]),
+                                el('td', { class: 'num', text: String(u.xp) }),
+                                el('td', {}, [
+                                    // Ban/Unban button
+                                    el('button', {
+                                        class: `btn ghost ${isBanned ? 'success' : 'danger'}`,
+                                        text: isBanned ? 'Unban' : 'Ban',
+                                        onclick: async () => {
+                                            if (!confirm(`Are you sure you want to ${isBanned ? 'unban' : 'ban'} ${u.username}?`)) return;
+                                            try {
+                                                await apiFetch(`/api/admin/users/${u.id}/ban?ban=${!isBanned}`, { method: 'PUT' });
+                                                toast(`User ${isBanned ? 'unbanned' : 'banned'}`, 'success');
+                                                fetchUsers(); // refresh
+                                            } catch (err) {
+                                                toast(err.message, 'error');
+                                            }
+                                        }
+                                    })
+                                ])
+                            ]));
+                        });
+                        table.appendChild(tbody);
+                        tableContainer.appendChild(el('div', { class: 'table-wrap' }, [table]));
+
+                    } catch (err) {
+                        tableContainer.innerHTML = `<p class="error">${err.message}</p>`;
+                    }
                 }
+
+                // Initial load
+                fetchUsers();
             }
 
             // ---- Load Job Queue Monitor ----

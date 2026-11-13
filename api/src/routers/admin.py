@@ -34,41 +34,44 @@ async def get_platform_stats(
 async def list_users(
     limit: int = 50,
     offset: int = 0,
+    search: str | None = None,
     admin: CurrentUser = Depends(require_admin)
 ):
     """
     List all users, paginated. Only accessible to admins.
+    Supports optional search by username or email.
     """
-    users = await db.fetch_all(
-        """
-        SELECT id, username, email, role, created_at, last_login_at, xp
-        FROM users
-        ORDER BY id ASC
-        LIMIT $1 OFFSET $2
-        """,
-        limit, offset
-    )
+    if search:
+        users = await db.fetch_all(
+            """
+            SELECT id, username, email, role, created_at, xp, is_banned
+            FROM users
+            WHERE username ILIKE $1 OR email ILIKE $1
+            ORDER BY id ASC LIMIT $2 OFFSET $3
+            """, f"%{search}%", limit, offset
+        )
+    else:
+        users = await db.fetch_all(
+            """
+            SELECT id, username, email, role, created_at, xp, is_banned
+            FROM users ORDER BY id ASC LIMIT $1 OFFSET $2
+            """, limit, offset
+        )
     return [dict(u) for u in users]
 
 
-@router.put("/users/{user_id}/role")
-async def update_user_role(
+@router.put("/users/{user_id}/ban")
+async def toggle_user_ban(
     user_id: int,
-    role: str,  # "student", "instructor", "admin"
+    ban: bool,
     admin: CurrentUser = Depends(require_admin)
 ):
-    """
-    Change a user's role. Only accessible to admins.
-    """
-    if role not in ("student", "instructor", "admin"):
-        raise HTTPException(status_code=400, detail="Invalid role")
-
     if user_id == admin.id:
-        raise HTTPException(status_code=400, detail="You cannot change your own role")
-
+        raise HTTPException(status_code=400, detail="You cannot ban yourself")
+        
     await db.execute(
-        "UPDATE users SET role = $1 WHERE id = $2",
-        role, user_id
+        "UPDATE users SET is_banned = $1 WHERE id = $2",
+        ban, user_id
     )
     return {"status": "ok"}
 

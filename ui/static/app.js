@@ -215,6 +215,15 @@ async function apiFetch(path, options = {}) {
                 throw new ApiError(401, 'Session expired');
             }
         }
+        // Handle 403 globally (banned users)
+        if (resp.status === 403 && body && body.detail === "Your account has been suspended.") {
+            Auth.clear();
+            if (!location.pathname.endsWith('index.html')) {
+                // Use a query param to show a specific message on the login page
+                location.href = 'index.html?banned=1';
+                throw new ApiError(403, 'Account suspended');
+            }
+        }
         const detail = body && body.detail ? body.detail : resp.statusText;
         throw new ApiError(resp.status, detail);
     }
