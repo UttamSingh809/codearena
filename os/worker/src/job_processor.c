@@ -60,6 +60,7 @@ static int verdict_priority(const char *v)
 /* ------------------------------------------------------------------ */
 
 typedef struct {
+    long id;
     int     ordinal;
     char   *input;
     char   *expected;
@@ -92,7 +93,7 @@ static int fetch_test_cases(worker_t *w, uint64_t problem_id,
     snprintf(pid, sizeof(pid), "%llu", (unsigned long long)problem_id);
 
     const char *sql =
-        "SELECT ordinal, input_data, expected_output, points "
+        "SELECT id, ordinal, input_data, expected_output, points "
         "FROM test_cases WHERE problem_id = $1 ORDER BY ordinal";
 
     const char *params[1] = { pid };
@@ -112,6 +113,7 @@ static int fetch_test_cases(worker_t *w, uint64_t problem_id,
     }
 
     for (int i = 0; i < n; i++) {
+        out->cases[i].id = db_result_get_int64(r, i, 0);
         out->cases[i].ordinal  = db_result_get_int32(r, i, 0);
         const char *inp = db_result_get(r, i, 1);
         const char *exp = db_result_get(r, i, 2);
@@ -393,6 +395,28 @@ static void run_one_test(worker_t *w, const char *binary_path,
 
     sandbox_result_free(&res);
 }
+
+void grading_result_free(grading_result_t *g)
+{
+    if (!g)
+        return;
+    if (g->cases)
+    {
+        for (int i = 0; i < g->cases_count; i++)
+        {
+            free(g->cases[i].actual_output);
+        }
+        free(g->cases);
+        g->cases = NULL;
+        g->cases_count = 0;
+    }
+    free(g->stdout_capture);
+    free(g->stderr_capture);
+    g->stdout_capture = NULL;
+    g->stderr_capture = NULL;
+}
+
+
 /* ------------------------------------------------------------------ */
 /* Main entry point                                                   */
 /* ------------------------------------------------------------------ */
@@ -491,6 +515,13 @@ int job_process(worker_t *w, uint64_t submission_id,
     g->test_total = ts.count;
     g->test_passed = 0;
     g->first_failed = 0;
+    g->cases_count = ts.count;
+    g->cases = calloc((size_t)ts.count, sizeof(test_case_result_t));
+    if (!g->cases)
+    {
+        test_case_set_free(&ts);
+        return -1;
+    }
 
     for (int i = 0; i < ts.count; i++)
     {
@@ -520,6 +551,15 @@ int job_process(worker_t *w, uint64_t submission_id,
                      2000, 256,
                      this_verdict, sizeof(this_verdict),
                      &out, &err, &rt, &mem);
+
+        // --- Record per-case result ---
+        test_case_result_t *cr = &g->cases[i];
+        cr->ordinal = ts.cases[i].ordinal;
+        cr->test_case_id = ts.cases[i].id;
+        strncpy(cr->verdict, this_verdict, sizeof(cr->verdict) - 1);
+        cr->actual_output = out ? strdup(out) : NULL;
+        cr->runtime_ms = rt;
+        cr->memory_kb = mem;
 
         total_points += ts.cases[i].points;
         int prio = verdict_priority(this_verdict);
