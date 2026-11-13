@@ -44,8 +44,9 @@
                 <nav class="admin-nav">
                     <a href="#" class="active" id="nav-stats">Overview</a>
                     <a href="#" id="nav-users">Users</a>
-                    <a href="#" id="nav-problems">Analytics</a>
+                    <a href="#" id="nav-analytics">Analytics</a>
                     <a href="#" id="nav-jobs">Job Queue</a>
+                    <a href="#" id="nav-create">Create Problem</a>
                 </nav>
             </aside>
 
@@ -76,8 +77,9 @@
             // Navigation
             document.getElementById('nav-stats').onclick = (e) => { e.preventDefault(); loadStats(e.target); };
             document.getElementById('nav-users').onclick = (e) => { e.preventDefault(); loadUsers(e.target); };
-            document.getElementById('nav-problems').onclick = (e) => { e.preventDefault(); loadAnalytics(e.target); };
+            document.getElementById('nav-analytics').onclick = (e) => { e.preventDefault(); loadAnalytics(e.target); };
             document.getElementById('nav-jobs').onclick = (e) => { e.preventDefault(); loadJobs(e.target); };
+            document.getElementById('nav-create').onclick = (e) => { e.preventDefault(); loadCreateProblem(e.target); };
 
             function setActiveNav(clickedEl) {
                 document.querySelectorAll('.admin-nav a').forEach(a => a.classList.remove('active'));
@@ -285,6 +287,181 @@
                 } catch (err) {
                     toast(err.message || 'Failed to load analytics', 'error');
                 }
+            }
+
+            // ---- Load Create Problem Form ----
+            function loadCreateProblem(elClicked) {
+                setActiveNav(elClicked);
+                content.innerHTML = '';
+
+                content.appendChild(el('h1', { text: 'Create Problem', style: { marginBottom: '24px' } }));
+                content.appendChild(el('p', { class: 'muted', style: { marginBottom: '24px' }, text: 'Fill in the details below. Test cases must have an expected output.' }));
+
+                const form = el('form', { id: 'create-problem-form' });
+
+                // --- Basic Info ---
+                form.appendChild(el('div', { class: 'card mb-24' }, [
+                    el('h3', { text: 'Basic Info' }),
+                    el('div', { class: 'field' }, [
+                        el('label', { text: 'Title' }),
+                        el('input', { type: 'text', id: 'cp-title', required: true })
+                    ]),
+                    el('div', { class: 'field' }, [
+                        el('label', { text: 'Description' }),
+                        el('textarea', { id: 'cp-desc', required: true, style: { minHeight: '100px' } })
+                    ]),
+                    el('div', { class: 'field' }, [
+                        el('label', { text: 'Input Format' }),
+                        el('input', { type: 'text', id: 'cp-input' })
+                    ]),
+                    el('div', { class: 'field' }, [
+                        el('label', { text: 'Output Format' }),
+                        el('input', { type: 'text', id: 'cp-output' })
+                    ]),
+                    el('div', { class: 'field' }, [
+                        el('label', { text: 'Constraints' }),
+                        el('input', { type: 'text', id: 'cp-constraints' })
+                    ])
+                ]));
+
+                // --- Limits ---
+                form.appendChild(el('div', { class: 'card mb-24' }, [
+                    el('h3', { text: 'Limits' }),
+                    el('div', { class: 'flex gap-16' }, [
+                        el('div', { class: 'field', style: { flex: 1 } }, [
+                            el('label', { text: 'Time Limit (ms)' }),
+                            el('input', { type: 'number', id: 'cp-time', value: '2000', min: '1' })
+                        ]),
+                        el('div', { class: 'field', style: { flex: 1 } }, [
+                            el('label', { text: 'Memory Limit (MB)' }),
+                            el('input', { type: 'number', id: 'cp-memory', value: '256', min: '1' })
+                        ]),
+                        el('div', { class: 'field', style: { flex: 1 } }, [
+                            el('label', { text: 'Difficulty' }),
+                            el('select', { id: 'cp-difficulty' }, [
+                                el('option', { value: 'easy', text: 'Easy' }),
+                                el('option', { value: 'medium', text: 'Medium' }),
+                                el('option', { value: 'hard', text: 'Hard' })
+                            ])
+                        ])
+                    ])
+                ]));
+
+                // --- Test Cases Container ---
+                const tcContainer = el('div', { class: 'card mb-24' }, [
+                    el('div', { class: 'flex', style: { justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' } }, [
+                        el('h3', { text: 'Test Cases', style: { margin: 0 } }),
+                        el('button', { type: 'button', class: 'btn secondary', text: '+ Add Test Case', onclick: addTestCase })
+                    ]),
+                    el('div', { id: 'tc-list' })
+                ]);
+                form.appendChild(tcContainer);
+
+                form.appendChild(el('div', { class: 'flex', style: { justifyContent: 'flex-end' } }, [
+                    el('button', { type: 'submit', class: 'btn', text: 'Create Problem' })
+                ]));
+
+                content.appendChild(form);
+
+                // --- Test Case Builder Logic ---
+                let tcCount = 0;
+
+                function addTestCase(data = { input_data: '', expected_output: '', is_sample: false }) {
+                    tcCount++;
+                    const tcId = 'tc-' + tcCount;
+                    const wrapper = el('div', { id: tcId, style: { padding: '16px', border: '1px solid var(--neutral-deep)', borderRadius: '8px', marginBottom: '16px', position: 'relative' } });
+
+                    wrapper.appendChild(el('button', {
+                        type: 'button',
+                        class: 'btn ghost',
+                        text: '✕',
+                        style: { position: 'absolute', top: '8px', right: '8px', color: 'var(--danger)' },
+                        onclick: () => wrapper.remove()
+                    }));
+
+                    wrapper.appendChild(el('div', { class: 'flex gap-16', style: { marginBottom: '12px' } }, [
+                        el('div', { class: 'field', style: { flex: 1 } }, [
+                            el('label', { text: 'Input' }),
+                            el('textarea', { class: 'tc-input', style: { minHeight: '60px', fontFamily: 'var(--font-mono)' }, text: data.input_data })
+                        ]),
+                        el('div', { class: 'field', style: { flex: 1 } }, [
+                            el('label', { text: 'Expected Output' }),
+                            el('textarea', { class: 'tc-expected', style: { minHeight: '60px', fontFamily: 'var(--font-mono)' }, text: data.expected_output })
+                        ])
+                    ]));
+
+                    wrapper.appendChild(el('label', { class: 'flex gap-8', style: { alignItems: 'center', fontSize: '13px', color: 'var(--secondary)' } }, [
+                        el('input', { type: 'checkbox', class: 'tc-sample', checked: data.is_sample }),
+                        'Is this a sample test case? (visible to users)'
+                    ]));
+
+                    document.getElementById('tc-list').appendChild(wrapper);
+                }
+
+                // Add one empty test case by default
+                addTestCase();
+
+                // --- Form Submission ---
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const btn = form.querySelector('button[type="submit"]');
+                    btn.disabled = true;
+                    btn.textContent = 'Creating...';
+
+                    // Gather test cases
+                    const tcElements = document.querySelectorAll('#tc-list > div');
+                    const test_cases = [];
+                    let valid = true;
+
+                    tcElements.forEach(wrapper => {
+                        const input = wrapper.querySelector('.tc-input').value;
+                        const expected = wrapper.querySelector('.tc-expected').value;
+                        const is_sample = wrapper.querySelector('.tc-sample').checked;
+
+                        if (!expected.trim()) {
+                            valid = false;
+                        }
+
+                        test_cases.push({
+                            input_data: input,
+                            expected_output: expected,
+                            is_sample: is_sample,
+                            points: 10
+                        });
+                    });
+
+                    if (!valid || test_cases.length === 0) {
+                        if (!valid) toast('Test cases must have an expected output', 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Create Problem';
+                        return;
+                    }
+
+                    const payload = {
+                        title: document.getElementById('cp-title').value,
+                        description: document.getElementById('cp-desc').value,
+                        input_format: document.getElementById('cp-input').value || null,
+                        output_format: document.getElementById('cp-output').value || null,
+                        constraints: document.getElementById('cp-constraints').value || null,
+                        time_limit_ms: parseInt(document.getElementById('cp-time').value, 10),
+                        memory_limit_mb: parseInt(document.getElementById('cp-memory').value, 10),
+                        difficulty: document.getElementById('cp-difficulty').value,
+                        test_cases: test_cases
+                    };
+
+                    try {
+                        await apiFetch('/api/admin/problems', {
+                            method: 'POST',
+                            body: JSON.stringify(payload)
+                        });
+                        toast('Problem created successfully!', 'success');
+                        loadStats(document.getElementById('nav-stats')); // Go back to overview
+                    } catch (err) {
+                        toast(err.message || 'Failed to create problem', 'error');
+                        btn.disabled = false;
+                        btn.textContent = 'Create Problem';
+                    }
+                };
             }
 
             // Load default view

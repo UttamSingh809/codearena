@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import db
 from ..deps import CurrentUser, require_admin
+from ..models.problem import CreateProblemRequest
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -147,3 +148,45 @@ async def get_platform_analytics(
     )
 
     return [dict(r) for r in rows]
+
+
+@router.post("/problems")
+async def create_problem(
+    req: CreateProblemRequest,
+    admin: CurrentUser = Depends(require_admin),
+):
+    """
+    Create a new problem and its test cases atomically.
+    """
+    async with db.pool().acquire() as conn:
+        async with conn.transaction():
+            # 1. Insert the problem
+            problem_row = await conn.fetchrow(
+                """
+                INSERT INTO problems
+                    (title, description, input_format, output_format,
+                     constraints, time_limit_ms, memory_limit_mb,
+                     difficulty, is_active, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE, $9)
+                RETURNING id
+                """,
+                req.title, req.description, req.input_format,
+                req.output_format, req.constraints, req.time_limit_ms,
+                req.memory_limit_mb, req.difficulty, admin.id,
+            )
+            problem_id = problem_row["id"]
+
+            # 2. Insert all test cases
+            for idx, tc in enumerate(req.test_cases, start=1):
+                await conn.execute(
+                    """
+                    INSERT INTO test_cases
+                        (problem_id, ordinal, input_data, expected_output,
+                         is_sample, points)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    """,
+                    problem_id, idx, tc.input_data, tc.expected_output,
+                    tc.is_sample, tc.points,
+                )
+
+    return {"id": problem_id, "status": "created"}
