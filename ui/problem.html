@@ -29,24 +29,27 @@
 
 <body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
-    <main class="problem-layout" id="main-content" tabindex="-1">
+    <main class="problem-layout" id="split-container">
+        <!-- Breadcrumb (keep as is) -->
         <nav class="breadcrumb" id="problem-breadcrumb" style="grid-column: 1 / -1;">
             <a href="problems.html">Problems</a>
             <span class="sep">/</span>
             <span class="current" id="problem-breadcrumb-title">Loading…</span>
         </nav>
-        <!-- ============================================================
-         LEFT PANE — Problem statement (scrolls with the page)
-         ============================================================ -->
-        <section class="problem-statement">
+
+        <!-- LEFT PANE -->
+        <section class="problem-statement" id="left-pane">
             <div id="problem-header" class="mb-24"></div>
             <div id="statement"></div>
         </section>
 
-        <!-- ============================================================
-         RIGHT PANE — Editor + submit + verdict (sticky)
-         ============================================================ -->
-        <aside class="problem-editor">
+        <!-- DRAG HANDLE -->
+        <div class="split-handle" id="split-handle" title="Drag to resize">
+            <div class="split-handle-line"></div>
+        </div>
+
+        <!-- RIGHT PANE -->
+        <aside class="problem-editor" id="right-pane">
             <div class="editor-inner">
                 <!-- Toolbar -->
                 <div class="editor-toolbar">
@@ -126,6 +129,82 @@
 
         (function() {
             if (!requireAuth('problems')) return;
+
+            // ---- Resizable Split Pane ----
+            (function setupSplitPane() {
+                const container = document.getElementById('split-container');
+                const handle = document.getElementById('split-handle');
+                const leftPane = document.getElementById('left-pane');
+                const rightPane = document.getElementById('right-pane');
+
+                if (!container || !handle || !leftPane || !rightPane) return;
+
+                // Only enable on desktop
+                if (window.innerWidth <= 1000) return;
+
+                let isDragging = false;
+                let startX = 0;
+                let startLeftWidth = 0;
+
+                // Restore saved preference
+                const savedRatio = localStorage.getItem('codearena_split_ratio');
+                if (savedRatio) {
+                    const ratio = parseFloat(savedRatio);
+                    applyRatio(ratio);
+                }
+
+                function applyRatio(leftRatio) {
+                    // Clamp between 20% and 80% so neither pane disappears
+                    const r = Math.max(0.2, Math.min(0.8, leftRatio));
+                    const rightRatio = 1 - r;
+
+                    // 12px is the handle width
+                    container.style.gridTemplateColumns = `minmax(0, ${r}fr) 12px minmax(0, ${rightRatio}fr)`;
+                }
+
+                handle.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    startX = e.clientX;
+                    startLeftWidth = leftPane.getBoundingClientRect().width;
+                    handle.classList.add('dragging');
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                });
+
+                window.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+
+                    const dx = e.clientX - startX;
+                    const newLeftWidth = startLeftWidth + dx;
+                    const containerWidth = container.getBoundingClientRect().width;
+
+                    const ratio = newLeftWidth / containerWidth;
+                    applyRatio(ratio);
+                });
+
+                window.addEventListener('mouseup', () => {
+                    if (!isDragging) return;
+                    isDragging = false;
+                    handle.classList.remove('dragging');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+
+                    // Save preference (compute the actual ratio used)
+                    const containerWidth = container.getBoundingClientRect().width;
+                    const currentLeftWidth = leftPane.getBoundingClientRect().width;
+                    localStorage.setItem('codearena_split_ratio', (currentLeftWidth / containerWidth).toString());
+                });
+
+                // Handle window resize to prevent broken layouts
+                window.addEventListener('resize', () => {
+                    if (window.innerWidth <= 1000) {
+                        container.style.gridTemplateColumns = '';
+                    } else {
+                        const saved = localStorage.getItem('codearena_split_ratio');
+                        if (saved) applyRatio(parseFloat(saved));
+                    }
+                });
+            })();
 
             const params = new URLSearchParams(location.search);
             const problemId = parseInt(params.get('id') || '0', 10);
