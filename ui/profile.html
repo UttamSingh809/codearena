@@ -122,6 +122,32 @@
                 }
             });
 
+            async function toggleFollow() {
+                const btn = document.getElementById('follow-btn');
+                if (!btn) return;
+                const isFollowing = btn.textContent === 'Following';
+                btn.disabled = true;
+                btn.textContent = '...';
+
+                try {
+                    if (isFollowing) {
+                        await apiFetch(`/api/follows/${encodeURIComponent(username)}`, { method: 'DELETE' });
+                        btn.textContent = 'Follow';
+                        btn.className = 'btn';
+                    } else {
+                        await apiFetch(`/api/follows/${encodeURIComponent(username)}`, { method: 'POST' });
+                        btn.textContent = 'Following';
+                        btn.className = 'btn secondary';
+                    }
+                } catch (err) {
+                    toast(err.message || 'Failed to update follow status', 'error');
+                    btn.textContent = isFollowing ? 'Following' : 'Follow';
+                    btn.className = isFollowing ? 'btn secondary' : 'btn';
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
             if (!username) {
                 emptyState(container, 'No user selected',
                     'Open a profile from the leaderboard.');
@@ -198,13 +224,13 @@
             function renderProfile(container, profile, heatmap) {
                 clear(container);
 
-                // Header: avatar, username, bio, and owner controls
+                // Header: avatar, username, bio, follower counts and action buttons
                 const initial = profile.username.charAt(0).toUpperCase();
                 const avatar = el('div', {
                     class: 'avatar profile-avatar',
                     role: 'img',
                     'aria-label': `${profile.username}'s avatar`,
-                    style: { width: '80px', height: '80px', fontSize: '32px' },
+                    style: { width: '80px', height: '80px', fontSize: '32px', flexShrink: 0 },
                     text: initial,
                 });
                 if (profile.avatar_url) {
@@ -217,30 +243,39 @@
                     }));
                 }
 
-                const profileHeader = el('div', {
-                    style: { display: 'flex', gap: '24px', alignItems: 'center', marginBottom: '32px' }
+                const headerEl = el('div', {
+                    style: { display: 'flex', gap: '24px', alignItems: 'center', marginBottom: '32px', flexWrap: 'wrap' }
                 }, [
                     avatar,
-                    el('div', { style: { flex: 1 } }, [
+                    el('div', { style: { flex: 1, minWidth: '200px' } }, [
                         el('h1', { text: profile.username, style: { margin: 0, fontSize: '2rem' } }),
                         el('p', {
                             class: 'muted',
                             text: `Joined ${formatDate(profile.joined_at)} · ${profile.role}`,
                             style: { margin: '4px 0 0' },
                         }),
-                        profile.bio && el('p', {
-                            text: profile.bio,
-                            style: { margin: '8px 0 0', whiteSpace: 'pre-wrap' },
-                        }),
+                        profile.bio && el('p', { text: profile.bio, style: { marginTop: '8px', fontStyle: 'italic' } }),
+                        // Follower counts
+                        el('div', { style: { display: 'flex', gap: '16px', marginTop: '8px', fontSize: '13px' } }, [
+                            el('span', { class: 'muted', text: `${profile.follower_count} followers` }),
+                            el('span', { class: 'muted', text: `${profile.following_count} following` }),
+                        ])
                     ]),
-                    isOwnProfile && el('button', {
-                        class: 'btn',
-                        type: 'button',
-                        text: 'Edit Profile',
-                        onclick: openEditModal,
-                    }),
+                    // Action buttons
+                    el('div', { style: { display: 'flex', gap: '8px' } }, [
+                        isOwnProfile ? el('button', {
+                            class: 'btn secondary',
+                            text: 'Edit Profile',
+                            onclick: openEditModal
+                        }) : el('button', {
+                            id: 'follow-btn',
+                            class: profile.is_following ? 'btn secondary' : 'btn',
+                            text: profile.is_following ? 'Following' : 'Follow',
+                            onclick: toggleFollow
+                        })
+                    ])
                 ]);
-                container.appendChild(profileHeader);
+                container.appendChild(headerEl);
 
                 // Stats grid
                 const statsGrid = el('div', { class: 'card-grid mb-24' }, [

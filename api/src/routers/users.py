@@ -37,6 +37,23 @@ async def get_public_profile(
     if target is None:
         raise HTTPException(status_code=404, detail="user not found")
 
+    # Get follower / following counts
+    counts = await db.fetch_one(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM follows WHERE following_id = $1) AS follower_count,
+            (SELECT COUNT(*) FROM follows WHERE follower_id = $1) AS following_count
+        """,
+        target["id"],
+    )
+
+    # Check if current user is following this user
+    is_following = await db.fetch_val(
+        "SELECT EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = $2)",
+        user.id,
+        target["id"],
+    )
+
     # Aggregate stats from the leaderboard materialized view
     stats = await db.fetch_one(
         """
@@ -86,6 +103,9 @@ async def get_public_profile(
         "total_score": stats["total_score"],
         "total_solved": stats["total_solved"],
         "total_submissions": stats["total_submissions"],
+        "follower_count": counts["follower_count"],
+        "following_count": counts["following_count"],
+        "is_following": is_following,
     }
 
 

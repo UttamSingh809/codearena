@@ -30,54 +30,58 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <main id="main-content" tabindex="-1">
         <h1>Leaderboard</h1>
-        <p class="muted mb-24">Global ranking across all problems.</p>
 
-        <div id="leaderboard-view"></div>
+        <div class="auth-tabs" style="margin-bottom: 24px; max-width: 400px;">
+            <button id="tab-global" class="active">Global</button>
+            <button id="tab-friends">Friends</button>
+        </div>
+
+        <div id="leaderboard-view">
+            <div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>
+        </div>
     </main>
 
     <script src="static/app.js"></script>
     <script>
         'use strict';
 
-        (function() {
+        (function () {
             if (!requireAuth('leaderboard')) return;
 
             const container = document.getElementById('leaderboard-view');
+            const tabGlobal = document.getElementById('tab-global');
+            const tabFriends = document.getElementById('tab-friends');
 
-            // 4. Render Skeleton immediately
-            loadingState(container, 'leaderboard');
+            let currentTab = 'global';
 
-            (async() => {
+            function setActiveTab(tab) {
+                currentTab = tab;
+                tabGlobal.classList.toggle('active', tab === 'global');
+                tabFriends.classList.toggle('active', tab === 'friends');
+                loadLeaderboard();
+            }
+
+            async function loadLeaderboard() {
+                container.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading…</span></div>`;
+
                 try {
-                    const rows = await Api.leaderboard(100, 0);
+                    const endpoint = currentTab === 'global' ? '/api/leaderboard' : '/api/leaderboard/friends';
+                    const rows = await apiFetch(endpoint);
 
                     if (!rows.length) {
                         emptyState(container, 'No rankings yet',
-                            'Be the first to submit a solution!');
+                            currentTab === 'friends' ? 'Follow other users to compare your ranking.' : 'Be the first to submit a solution!');
                         return;
                     }
 
                     const table = el('table');
                     table.appendChild(el('thead', {}, [
                         el('tr', {}, [
-                            el('th', {
-                                text: 'Rank'
-                            }),
-                            el('th', {
-                                text: 'User'
-                            }),
-                            el('th', {
-                                class: 'num',
-                                text: 'Score'
-                            }),
-                            el('th', {
-                                class: 'num',
-                                text: 'Solved'
-                            }),
-                            el('th', {
-                                class: 'num',
-                                text: 'Submissions'
-                            }),
+                            el('th', { text: 'Rank' }),
+                            el('th', { text: 'User' }),
+                            el('th', { class: 'num', text: 'Score' }),
+                            el('th', { class: 'num', text: 'Solved' }),
+                            el('th', { class: 'num', text: 'Submissions' }),
                         ]),
                     ]));
                     const tbody = el('tbody');
@@ -90,44 +94,31 @@
 
                         tbody.appendChild(el('tr', {}, [
                             el('td', {}, [
-                                el('span', {
-                                    class: `rank-medal ${medalClass}`,
-                                    text: String(rank)
-                                }),
+                                el('span', { class: `rank-medal ${medalClass}`, text: String(rank) }),
                             ]),
                             el('td', {}, [
-                                el('a', {
-                                    href: `profile.html?user=${encodeURIComponent(r.username)}`,
-                                    text: r.username,
-                                }),
+                                el('a', { href: `profile.html?user=${encodeURIComponent(r.username)}`, text: r.username })
                             ]),
-                            el('td', {
-                                class: 'num',
-                                text: String(r.total_score)
-                            }),
-                            el('td', {
-                                class: 'num',
-                                text: String(r.total_solved)
-                            }),
-                            el('td', {
-                                class: 'num',
-                                text: String(r.total_submissions)
-                            }),
+                            el('td', { class: 'num', text: String(r.total_score) }),
+                            el('td', { class: 'num', text: String(r.total_solved) }),
+                            el('td', { class: 'num', text: String(r.total_submissions) }),
                         ]));
                     }
                     table.appendChild(tbody);
 
                     clear(container);
-                    container.appendChild(el('div', {
-                        class: 'table-wrap'
-                    }, [table]));
+                    container.appendChild(el('div', { class: 'table-wrap' }, [table]));
                 } catch (err) {
-                    const message = friendlyErrorMessage(err, 'Failed to load leaderboard');
-                    emptyState(container, 'Failed to load', message);
+                    emptyState(container, 'Failed to load', err.message || 'Failed to load leaderboard');
                     console.error('Failed to load leaderboard:', err);
-                    toast(message, 'error');
                 }
-            })();
+            }
+
+            tabGlobal.addEventListener('click', () => setActiveTab('global'));
+            tabFriends.addEventListener('click', () => setActiveTab('friends'));
+
+            // Load global by default
+            loadLeaderboard();
         })();
     </script>
 </body>

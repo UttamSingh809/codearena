@@ -86,3 +86,42 @@ async def problem_leaderboard(
         }
         for r in rows
     ]
+
+
+@router.get("/friends")
+async def friends_leaderboard(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Global ranking, but filtered to the current user + their friends."""
+    rows = await db.fetch_all(
+        """
+        WITH followed_users AS (
+            SELECT following_id FROM follows WHERE follower_id = $1
+            UNION SELECT $1  -- include the user themselves
+        )
+        SELECT
+            RANK() OVER (ORDER BY SUM(best_score) DESC, COUNT(*) FILTER (WHERE accepted_count > 0) DESC) AS rank,
+            username,
+            SUM(best_score)                            AS total_score,
+            COUNT(*) FILTER (WHERE accepted_count > 0) AS total_solved,
+            SUM(total_submissions)                     AS total_submissions
+        FROM leaderboard
+        WHERE user_id IN (SELECT following_id FROM followed_users)
+        GROUP BY user_id, username
+        ORDER BY total_score DESC, total_solved DESC
+        LIMIT $2 OFFSET $3
+        """,
+        user.id, limit, offset,
+    )
+    return [
+        {
+            "rank": r["rank"],
+            "username": r["username"],
+            "total_score": r["total_score"],
+            "total_solved": r["total_solved"],
+            "total_submissions": r["total_submissions"],
+        }
+        for r in rows
+    ]

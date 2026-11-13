@@ -16,6 +16,7 @@ from .config import settings
 from .routers import (
     admin,
     auth,
+    follows,
     health,
     leaderboard,
     problems,
@@ -90,6 +91,7 @@ app.include_router(users.router)
 app.include_router(records.router)
 app.include_router(run.router)
 app.include_router(admin.router)
+app.include_router(follows.router)
 
 @app.get("/")
 async def root():
