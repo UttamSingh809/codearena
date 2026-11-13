@@ -3050,3 +3050,14 @@ a.onboarding-step:hover {
     font-size: var(--text-lg);
     border-radius: var(--radius);
 }
+
+.test-case-detail td {
+    padding: 0 !important;
+    border-bottom: 1px solid var(--neutral-deep);
+}
+
+.test-case-detail .code-block {
+    margin: 0;
+    max-height: 200px;
+    overflow-y: auto;
+}

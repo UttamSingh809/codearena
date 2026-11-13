@@ -36,6 +36,8 @@
             <span class="current" id="submission-breadcrumb-title">Loading…</span>
         </nav>
         <div id="submission-view"></div>
+        <!-- Test Case Breakdown & Metrics -->
+        <div id="testcases-container"></div>
     </main>
 
     <script src="static/app.js"></script>
@@ -66,6 +68,9 @@
                 const bcTitle = document.getElementById('submission-breadcrumb-title');
                 if (bcTitle) bcTitle.textContent = `#${s.id}`;
                 clear(container);
+
+                const tcContainer = document.getElementById('testcases-container');
+                if (tcContainer) clear(tcContainer);
 
                 const r = s.result;
                 const verdict = r ? r.verdict : s.status;
@@ -285,6 +290,11 @@
                         text: s.source_code
                     }),
                 ]));
+
+                // Render Test Cases if completed
+                if (s.status === 'COMPLETED' || s.status === 'FAILED') {
+                    renderTestCases(s.id, r);
+                }
             }
 
             function metric(label, value) {
@@ -327,6 +337,144 @@
                     hour: '2-digit',
                     minute: '2-digit',
                 });
+            }
+
+            async function renderTestCases(submissionId, result) {
+                const container = document.getElementById('testcases-container');
+                if (!container) return;
+
+                // Show loading skeleton
+                container.innerHTML = `
+                    <div class="card mb-24">
+                        <div class="skeleton skeleton-title" style="width:200px;margin-bottom:16px;"></div>
+                        <div class="skeleton-table-row"><div class="skeleton skeleton-cell lg"></div><div class="skeleton skeleton-cell sm"></div></div>
+                        <div class="skeleton-table-row"><div class="skeleton skeleton-cell lg"></div><div class="skeleton skeleton-cell sm"></div></div>
+                    </div>
+                `;
+
+                try {
+                    const url = `/api/submissions/${submissionId}/testcases`;
+                    console.log(`[DEBUG] Fetching test cases from: ${url}`);
+
+                    const cases = await apiFetch(url);
+
+                    console.log(`[DEBUG] Received test cases:`, cases);
+
+                    if (!cases || cases.length === 0) {
+                        console.warn('[DEBUG] Test cases array is empty. Hiding panel.');
+                        container.innerHTML = '';
+                        return;
+                    }
+
+                    clear(container);
+
+                    // 1. Metrics Visualization (Runtime & Memory)
+                    if (result && result.verdict === 'AC') {
+                        // We need the problem limits. We can grab them from the first test case or pass them in.
+                        // For simplicity, let's assume we can fetch the problem from the submission.
+                        // But since we already have the result, let's just show the max runtime/memory relative to a standard.
+                        // A better approach is to fetch the problem limits, but we can approximate here.
+
+                        const maxRuntime = Math.max(...cases.map(c => c.runtime_ms || 0));
+                        const maxMemory = Math.max(...cases.map(c => c.memory_kb || 0));
+
+                        // We'll add a mock visualizer since we don't have limits in the result object.
+                        // (In a full build, you'd fetch the problem limits from the API).
+                    }
+
+                    // 2. Test Case Table
+                    const card = el('div', { class: 'card mb-24' });
+
+                    // Header
+                    card.appendChild(el('div', { class: 'card-header' }, [
+                        el('h3', { text: 'Test Case Results' }),
+                        el('span', { class: 'muted', text: `${cases.length} cases` })
+                    ]));
+
+                    const table = el('table');
+                    table.appendChild(el('thead', {}, [
+                        el('tr', {}, [
+                            el('th', { text: '#' }),
+                            el('th', { text: 'Verdict' }),
+                            el('th', { class: 'num', text: 'Runtime' }),
+                            el('th', { class: 'num', text: 'Memory' }),
+                            el('th', { text: '' }) // For the expand button
+                        ])
+                    ]));
+
+                    const tbody = el('tbody');
+
+                    for (const c of cases) {
+                        // Main row
+                        const tr = el('tr', {}, [
+                            el('td', { class: 'mono muted', text: String(c.ordinal) }),
+                            el('td', {}, [verdictBadge(c.verdict)]),
+                            el('td', { class: 'num', text: c.runtime_ms != null ? `${c.runtime_ms} ms` : '—' }),
+                            el('td', { class: 'num', text: c.memory_kb != null ? `${formatNumber(c.memory_kb)} KB` : '—' }),
+                            el('td', { style: { textAlign: 'right' } }, [
+                                el('button', {
+                                    class: 'btn ghost',
+                                    text: 'View Details',
+                                    onclick: () => toggleTestCaseDetails(tbody, c, tr)
+                                })
+                            ])
+                        ]);
+                        tbody.appendChild(tr);
+                    }
+
+                    table.appendChild(tbody);
+                    card.appendChild(table);
+                    container.appendChild(card);
+
+                } catch (err) {
+                    console.error('Failed to load test cases', err);
+                    container.innerHTML = '';
+                }
+            }
+
+            function toggleTestCaseDetails(tbody, tc, mainRow) {
+                // Check if details are already open
+                const next = mainRow.nextElementSibling;
+                if (next && next.classList.contains('test-case-detail')) {
+                    next.remove();
+                    return;
+                }
+
+                // Close any other open details
+                tbody.querySelectorAll('.test-case-detail').forEach(el => el.remove());
+
+                // Build detail row
+                const detailTr = el('tr', { class: 'test-case-detail' });
+                const detailTd = el('td', { colspan: '5', style: { background: 'var(--neutral-deep)', padding: '16px' } });
+
+                const content = el('div', { style: { display: 'flex', gap: '24px', flexWrap: 'wrap' } });
+
+                // Input (only if sample or admin)
+                if (tc.is_sample) {
+                    content.appendChild(el('div', { style: { flex: 1, minWidth: '200px' } }, [
+                        el('div', { style: { fontSize: '11px', textTransform: 'uppercase', color: 'var(--secondary)', fontWeight: 600, marginBottom: '4px' }, text: 'Input' }),
+                        el('pre', { class: 'code-block', style: { padding: '8px', fontSize: '12px' }, text: tc.input_data || '(empty)' })
+                    ]));
+                }
+
+                // Expected Output
+                content.appendChild(el('div', { style: { flex: 1, minWidth: '200px' } }, [
+                    el('div', { style: { fontSize: '11px', textTransform: 'uppercase', color: 'var(--secondary)', fontWeight: 600, marginBottom: '4px' }, text: 'Expected Output' }),
+                    el('pre', { class: 'code-block', style: { padding: '8px', fontSize: '12px' }, text: tc.expected_output || '(empty)' })
+                ]));
+
+                // Actual Output
+                if (tc.verdict !== 'AC') {
+                    content.appendChild(el('div', { style: { flex: 1, minWidth: '200px' } }, [
+                        el('div', { style: { fontSize: '11px', textTransform: 'uppercase', color: 'var(--danger)', fontWeight: 600, marginBottom: '4px' }, text: 'Your Output' }),
+                        el('pre', { class: 'code-block error-output', style: { padding: '8px', fontSize: '12px' }, text: tc.actual_output || '(no output)' })
+                    ]));
+                }
+
+                detailTd.appendChild(content);
+                detailTr.appendChild(detailTd);
+
+                mainRow.parentNode.insertBefore(detailTr, mainRow.nextSibling);
             }
 
             // 5. Render Skeleton immediately
