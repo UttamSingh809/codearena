@@ -94,7 +94,7 @@ static int fetch_test_cases(worker_t *w, uint64_t problem_id,
 
     const char *sql =
         "SELECT id, ordinal, input_data, expected_output, points "
-        "FROM test_cases WHERE problem_id = $1 ORDER BY ordinal";
+        "FROM test_cases WHERE problem_id = $1 ORDER BY ordinal ASC";
 
     const char *params[1] = { pid };
     db_result_t *r = db_exec(w->db, sql, 1, params);
@@ -114,12 +114,12 @@ static int fetch_test_cases(worker_t *w, uint64_t problem_id,
 
     for (int i = 0; i < n; i++) {
         out->cases[i].id = db_result_get_int64(r, i, 0);
-        out->cases[i].ordinal  = db_result_get_int32(r, i, 0);
-        const char *inp = db_result_get(r, i, 1);
-        const char *exp = db_result_get(r, i, 2);
+        out->cases[i].ordinal  = db_result_get_int32(r, i, 1);
+        const char *inp = db_result_get(r, i, 2);
+        const char *exp = db_result_get(r, i, 3);
         out->cases[i].input    = strdup(inp ? inp : "");
         out->cases[i].expected = strdup(exp ? exp : "");
-        out->cases[i].points   = db_result_get_int32(r, i, 3);
+        out->cases[i].points   = db_result_get_int32(r, i, 4);
         if (!out->cases[i].input || !out->cases[i].expected) {
             test_case_set_free(out);
             db_result_free(r);
@@ -556,7 +556,7 @@ int job_process(worker_t *w, uint64_t submission_id,
         test_case_result_t *cr = &g->cases[i];
         cr->ordinal = ts.cases[i].ordinal;
         cr->test_case_id = ts.cases[i].id;
-        strncpy(cr->verdict, this_verdict, sizeof(cr->verdict) - 1);
+        snprintf(cr->verdict, sizeof(cr->verdict), "%s", this_verdict);
         cr->actual_output = out ? strdup(out) : NULL;
         cr->runtime_ms = rt;
         cr->memory_kb = mem;
@@ -566,7 +566,7 @@ int job_process(worker_t *w, uint64_t submission_id,
         if (prio > worst_priority)
         {
             worst_priority = prio;
-            strncpy(worst_verdict, this_verdict, sizeof(worst_verdict) - 1);
+            snprintf(worst_verdict, sizeof(worst_verdict), "%s", this_verdict);
         }
 
         if (strcmp(this_verdict, "AC") == 0)
