@@ -32,6 +32,9 @@
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <main id="main-content" tabindex="-1">
         <div id="onboarding-container"></div>
+        <div class="card-grid mb-24" id="records-grid">
+            <!-- Populated via JS -->
+        </div>
         <div class="flex gap-16" style="align-items:center;justify-content:space-between;margin-bottom:32px;">
             <div>
                 <h1 id="greeting">Welcome back</h1>
@@ -82,6 +85,13 @@
                 try {
                     const freshUser = await Api.me();
                     Auth.saveToken(Auth.getToken(), freshUser);
+
+                    // Fetch records to get total distinct solved
+                    const records = await apiFetch('/api/stats/records');
+
+                    // Check milestones (solved count & level)
+                    checkMilestones(records.total_solved, freshUser.level || 1);
+
                     document.getElementById('greeting').textContent =
                         `Welcome back, ${freshUser.username}`;
                     document.getElementById('view-profile-btn').href =
@@ -91,6 +101,30 @@
                     const items = subs.items || [];
                     const totalSubs = subs.total || 0;
                     renderOnboarding(freshUser, totalSubs);
+
+                    // Fetch and render records
+                    try {
+                        const recordsGrid = document.getElementById('records-grid');
+                        clear(recordsGrid);
+
+                        recordsGrid.appendChild(recordCard(
+                            'Fastest Solve',
+                            records.fastest_runtime_ms ? `${records.fastest_runtime_ms} ms` : '—',
+                            records.fastest_problem || 'No solves yet'
+                        ));
+                        recordsGrid.appendChild(recordCard(
+                            'Hardest Solved',
+                            records.hardest_difficulty ? records.hardest_difficulty.toUpperCase() : '—',
+                            records.hardest_problem || 'No solves yet'
+                        ));
+                        recordsGrid.appendChild(recordCard(
+                            'Total Solved',
+                            records.total_solved,
+                            'unique problems'
+                        ));
+                    } catch (e) {
+                        console.warn('Could not load records', e);
+                    }
 
                     const accepted = items.filter(
                         s => s.verdict === 'AC'
@@ -221,6 +255,14 @@
                         class: 'stat-sub',
                         text: sub
                     })
+                ]);
+            }
+
+            function recordCard(label, value, sub) {
+                return el('div', { class: 'stat', style: { borderLeft: '3px solid var(--tertiary)' } }, [
+                    el('div', { class: 'stat-label', text: label }),
+                    el('div', { class: 'stat-value', text: String(value), style: { fontSize: '1.8rem' } }),
+                    el('div', { class: 'stat-sub', text: sub })
                 ]);
             }
 

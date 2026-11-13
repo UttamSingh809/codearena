@@ -2929,3 +2929,83 @@ a.onboarding-step:hover {
     border-radius: 3px;
     transition: width 0.4s ease-out;
 }
+
+/* ============================================================
+ * Milestone Celebrations
+ * ============================================================ */
+
+.milestone-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.milestone-backdrop.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.milestone-modal {
+    background: var(--surface);
+    border: 2px solid var(--tertiary);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 40px rgba(232, 75, 85, 0.3);
+    width: 100%;
+    max-width: 400px;
+    padding: var(--space-8) var(--space-6);
+    text-align: center;
+    transform: scale(0.9) translateY(20px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.milestone-backdrop.visible .milestone-modal {
+    transform: scale(1) translateY(0);
+}
+
+.milestone-icon {
+    font-size: 64px;
+    margin-bottom: var(--space-4);
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.milestone-modal h2 {
+    font-family: var(--font-serif);
+    font-size: 2rem;
+    color: var(--tertiary);
+    margin: 0 0 var(--space-2);
+}
+
+.milestone-modal p {
+    color: var(--secondary);
+    font-size: var(--text-base);
+    margin-bottom: var(--space-6);
+    line-height: 1.5;
+}
+
+.milestone-btn {
+    width: 100%;
+    padding: var(--space-4);
+    font-size: var(--text-lg);
+    border-radius: var(--radius);
+}

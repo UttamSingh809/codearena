@@ -1455,3 +1455,88 @@ const SHORTCUTS = [
         }
     });
 })();
+
+// ------------------------------------------------------------------
+// Milestones
+// ------------------------------------------------------------------
+
+function checkMilestones(totalSolved, currentLevel) {
+    const lastSolved = parseInt(localStorage.getItem('codearena_milestone_solved') || '0', 10);
+    const lastLevel = parseInt(localStorage.getItem('codearena_milestone_level') || '1', 10);
+
+    let milestoneToCelebrate = null;
+
+    // 1. Check Solve Count Milestones (1, 10, 50, 100)
+    const solveMilestones = [1, 10, 50, 100];
+    for (const m of solveMilestones) {
+        if (totalSolved >= m && lastSolved < m) {
+            milestoneToCelebrate = {
+                type: 'solves',
+                value: m,
+                title: m === 1 ? 'First Blood!' : `${m} Problems Solved!`,
+                message: m === 1
+                    ? "You've solved your first problem. Welcome to CodeArena!"
+                    : `You've successfully solved ${m} unique problems. Keep up the great work!`,
+                icon: '🎯'
+            };
+            break; // Prioritize solve milestones
+        }
+    }
+
+    // 2. Check Level Milestones (5, 10, 20)
+    if (!milestoneToCelebrate) {
+        const levelMilestones = [5, 10, 20];
+        for (const m of levelMilestones) {
+            if (currentLevel >= m && lastLevel < m) {
+                milestoneToCelebrate = {
+                    type: 'level',
+                    value: m,
+                    title: `Level ${m} Reached!`,
+                    message: `You are now Level ${m}. Your coding skills are growing fast!`,
+                    icon: '🌟'
+                };
+                break;
+            }
+        }
+    }
+
+    // 3. Trigger the modal
+    if (milestoneToCelebrate) {
+        // Save new state immediately so it doesn't trigger again on reload
+        localStorage.setItem('codearena_milestone_solved', Math.max(lastSolved, totalSolved).toString());
+        localStorage.setItem('codearena_milestone_level', Math.max(lastLevel, currentLevel).toString());
+
+        showMilestoneModal(milestoneToCelebrate);
+
+        // Trigger confetti for milestones too
+        if (typeof celebrateAC === 'function') {
+            setTimeout(celebrateAC, 500);
+        }
+    }
+}
+
+function showMilestoneModal(milestone) {
+    const backdrop = el('div', { class: 'milestone-backdrop' });
+    const modal = el('div', { class: 'milestone-modal' });
+
+    modal.appendChild(el('div', { class: 'milestone-icon', text: milestone.icon }));
+    modal.appendChild(el('h2', { text: milestone.title }));
+    modal.appendChild(el('p', { text: milestone.message }));
+
+    const btn = el('button', {
+        class: 'btn milestone-btn',
+        text: 'Awesome, continue!',
+        onclick: () => {
+            backdrop.classList.remove('visible');
+            setTimeout(() => backdrop.remove(), 300);
+        }
+    });
+    modal.appendChild(btn);
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+
+    // Trigger animation
+    void backdrop.offsetWidth;
+    backdrop.classList.add('visible');
+}
