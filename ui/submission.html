@@ -25,6 +25,7 @@
     <title>CodeArena — Submission</title>
     <link rel="stylesheet" href="static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/diff_match_patch/20121119/diff_match_patch.js"></script>
 </head>
 
 <body>
@@ -276,20 +277,34 @@
                 }
 
                 // ============================================================
-                // Source code
+                // Source code & Diff
                 // ============================================================
-                container.appendChild(el('div', {
-                    class: 'card'
-                }, [
-                    el('h3', {
-                        class: 'mb-0',
-                        text: 'Source code'
-                    }),
-                    el('pre', {
-                        class: 'code-block mt-16',
-                        text: s.source_code
-                    }),
-                ]));
+                const sourceCard = el('div', { class: 'card' }, [
+                    el('h3', { class: 'mb-0', text: 'Source code' }),
+                    el('pre', { class: 'code-block mt-16', text: s.source_code }),
+                ]);
+
+                // If there is a previous submission, add the diff toggle
+                if (s.previous_source_code != null) {
+                    const diffContainer = el('div', { class: 'hidden' });
+
+                    const diffToggle = el('div', {
+                        class: 'diff-toggle',
+                        onclick: () => {
+                            const isHidden = diffContainer.classList.contains('hidden');
+                            diffContainer.classList.toggle('hidden');
+                            diffToggle.textContent = isHidden ? 'Hide diff from previous submission' : 'Show diff from previous submission';
+                            if (isHidden && !diffContainer.hasChildNodes()) {
+                                renderDiff(diffContainer, s.previous_source_code, s.source_code);
+                            }
+                        }
+                    }, 'Show diff from previous submission');
+
+                    sourceCard.appendChild(diffToggle);
+                    sourceCard.appendChild(diffContainer);
+                }
+
+                container.appendChild(sourceCard);
 
                 // Render Test Cases if completed
                 if (s.status === 'COMPLETED' || s.status === 'FAILED') {
@@ -354,14 +369,10 @@
 
                 try {
                     const url = `/api/submissions/${submissionId}/testcases`;
-                    console.log(`[DEBUG] Fetching test cases from: ${url}`);
 
                     const cases = await apiFetch(url);
 
-                    console.log(`[DEBUG] Received test cases:`, cases);
-
                     if (!cases || cases.length === 0) {
-                        console.warn('[DEBUG] Test cases array is empty. Hiding panel.');
                         container.innerHTML = '';
                         return;
                     }
@@ -475,6 +486,58 @@
                 detailTr.appendChild(detailTd);
 
                 mainRow.parentNode.insertBefore(detailTr, mainRow.nextSibling);
+            }
+
+            function renderDiff(container, oldText, newText) {
+                if (typeof diff_match_patch === 'undefined') {
+                    container.innerHTML = '<p class="muted">Diff library not loaded.</p>';
+                    return;
+                }
+
+                const oldStr = oldText == null ? '' : String(oldText);
+                const newStr = newText == null ? '' : String(newText);
+
+                const dmp = new diff_match_patch();
+
+                // Diff the lines using the semantic cleanup
+                const a = dmp.diff_linesToChars_(oldStr, newStr);
+                const lineText1 = a.chars1;
+                const lineText2 = a.chars2;
+                const lineArray = a.lineArray;
+                const diffs = dmp.diff_main(lineText1, lineText2, false);
+                dmp.diff_charsToLines_(diffs, lineArray);
+                dmp.diff_cleanupSemantic(diffs);
+
+                const hasChanges = diffs.some(([type]) => type !== 0);
+                if (!hasChanges) {
+                    container.appendChild(el('p', { class: 'muted', style: { marginTop: '12px' }, text: 'No differences from previous submission.' }));
+                    return;
+                }
+
+                const diffWrapper = el('div', { class: 'diff-container' });
+                let lineNum = 1;
+
+                diffs.forEach(([type, text]) => {
+                    // type: -1 = deleted, 0 = equal, 1 = added
+                    const lines = text.split('\n');
+
+                    // Remove the last empty string if the text ends with a newline
+                    if (lines[lines.length - 1] === '') lines.pop();
+
+                    lines.forEach(line => {
+                        let rowClass = '';
+                        let prefix = '  ';
+                        if (type === 1) { rowClass = 'added'; prefix = '+ '; }
+                        else if (type === -1) { rowClass = 'removed'; prefix = '- '; }
+
+                        diffWrapper.appendChild(el('div', { class: `diff-line ${rowClass}` }, [
+                            el('div', { class: 'diff-line-num', text: String(lineNum++) }),
+                            el('div', { class: 'diff-line-content', text: prefix + line })
+                        ]));
+                    });
+                });
+
+                container.appendChild(diffWrapper);
             }
 
             // 5. Render Skeleton immediately

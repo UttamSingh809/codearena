@@ -121,6 +121,19 @@ async def get_submission(
     if user.role != "admin" and row["user_id"] != user.id:
         raise HTTPException(status_code=403, detail="not your submission")
 
+    # Find the previous submission for the same user and problem
+    prev_row = await db.fetch_one(
+        """
+        SELECT source_code
+        FROM submissions
+        WHERE user_id = $1 AND problem_id = $2 AND id < $3
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        row["user_id"], row["problem_id"], submission_id,
+    )
+    prev_code = prev_row["source_code"] if prev_row else None
+
     result = None
     if row["verdict"] is not None:
         result = ResultDetail(
@@ -143,6 +156,7 @@ async def get_submission(
         problem_id=row["problem_id"],
         language=row["language"],
         source_code=row["source_code"],
+        previous_source_code=prev_code,
         status=row["status"],
         submitted_at=row["submitted_at"],
         processing_started_at=row["processing_started_at"],

@@ -54,6 +54,7 @@ class SubmissionDetail(BaseModel):
     problem_id: int
     language: str
     source_code: str
+    previous_source_code: Optional[str] = None
     status: str
     submitted_at: datetime
     processing_started_at: Optional[datetime] = None
