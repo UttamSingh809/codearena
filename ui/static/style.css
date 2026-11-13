@@ -3288,3 +3288,69 @@ body.editor-fullscreen #toggle-fullscreen {
 .snippet-add:hover {
     background: var(--tertiary-dim);
 }
+
+/* ============================================================
+ * Simple CSS Bar Chart
+ * ============================================================ */
+
+.chart-container {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 200px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--neutral-deep);
+    border-radius: var(--radius);
+    margin-top: 16px;
+}
+
+.chart-bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    height: 100%;
+    position: relative;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
+}
+
+.chart-bar-segment {
+    width: 100%;
+    transition: height 0.3s ease;
+}
+
+.chart-bar-segment.ac { background: var(--tertiary); }
+.chart-bar-segment.wa { background: var(--danger); }
+.chart-bar-segment.other { background: var(--secondary); }
+
+.chart-label {
+    text-align: center;
+    font-size: 10px;
+    color: var(--secondary);
+    margin-top: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+    font-size: 12px;
+    justify-content: center;
+}
+
+.chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chart-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}

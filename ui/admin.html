@@ -44,7 +44,7 @@
                 <nav class="admin-nav">
                     <a href="#" class="active" id="nav-stats">Overview</a>
                     <a href="#" id="nav-users">Users</a>
-                    <a href="#" id="nav-problems">Problems</a>
+                    <a href="#" id="nav-problems">Analytics</a>
                     <a href="#" id="nav-jobs">Job Queue</a>
                 </nav>
             </aside>
@@ -76,10 +76,8 @@
             // Navigation
             document.getElementById('nav-stats').onclick = (e) => { e.preventDefault(); loadStats(e.target); };
             document.getElementById('nav-users').onclick = (e) => { e.preventDefault(); loadUsers(e.target); };
-
-            // Placeholder for future tabs
-            document.getElementById('nav-problems').onclick = (e) => { e.preventDefault(); toast('Problem management coming soon', 'info'); };
-            document.getElementById('nav-jobs').onclick = (e) => { e.preventDefault(); toast('Job queue monitor coming soon', 'info'); };
+            document.getElementById('nav-problems').onclick = (e) => { e.preventDefault(); loadAnalytics(e.target); };
+            document.getElementById('nav-jobs').onclick = (e) => { e.preventDefault(); loadJobs(e.target); };
 
             function setActiveNav(clickedEl) {
                 document.querySelectorAll('.admin-nav a').forEach(a => a.classList.remove('active'));
@@ -153,6 +151,139 @@
                     content.appendChild(el('div', { class: 'table-wrap' }, [table]));
                 } catch (err) {
                     toast(err.message || 'Failed to load users', 'error');
+                }
+            }
+
+            // ---- Load Job Queue Monitor ----
+            async function loadJobs(elClicked) {
+                setActiveNav(elClicked);
+                content.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading job queue…</span></div>`;
+
+                try {
+                    const data = await apiFetch('/api/admin/jobs');
+
+                    content.innerHTML = '';
+                    content.appendChild(el('h1', { text: 'Job Queue Monitor', style: { marginBottom: '24px' } }));
+
+                    // Stats Row
+                    const grid = el('div', { class: 'card-grid mb-24' });
+                    const statCard = (label, value, color) => el('div', { class: 'stat' }, [
+                        el('div', { class: 'stat-label', text: label }),
+                        el('div', { class: 'stat-value', text: String(value), style: { color: color } })
+                    ]);
+
+                    grid.appendChild(statCard('Pending Jobs', data.counts.pending, 'var(--secondary)'));
+                    grid.appendChild(statCard('Processing Jobs', data.counts.processing, 'var(--tertiary)'));
+                    grid.appendChild(statCard('Failed Jobs', data.counts.failed, 'var(--danger)'));
+                    grid.appendChild(statCard('Active Workers', data.active_workers.length, 'var(--success)'));
+                    content.appendChild(grid);
+
+                    // Worker Details
+                    if (data.active_workers.length > 0) {
+                        content.appendChild(el('h3', { text: 'Active Workers', style: { marginTop: '32px', marginBottom: '16px' } }));
+                        const workerTable = el('table');
+                        workerTable.appendChild(el('thead', {}, [
+                            el('tr', {}, [el('th', { text: 'Worker ID' }), el('th', { text: 'Active Jobs' })])
+                        ]));
+                        const wtBody = el('tbody');
+                        data.active_workers.forEach(w => {
+                            wtBody.appendChild(el('tr', {}, [
+                                el('td', { class: 'mono', text: w.worker_id }),
+                                el('td', { text: String(w.active_jobs) })
+                            ]));
+                        });
+                        workerTable.appendChild(wtBody);
+                        content.appendChild(el('div', { class: 'table-wrap mb-24' }, [workerTable]));
+                    }
+
+                    // Recent Failures
+                    if (data.recent_failures && data.recent_failures.length > 0) {
+                        content.appendChild(el('h3', { text: 'Recent Failures', style: { marginTop: '32px', marginBottom: '16px' } }));
+                        const failTable = el('table');
+                        failTable.appendChild(el('thead', {}, [
+                            el('tr', {}, [
+                                el('th', { text: 'Submission' }),
+                                el('th', { text: 'Problem' }),
+                                el('th', { text: 'Worker' }),
+                                el('th', { text: 'Retries' }),
+                                el('th', { text: 'Started' })
+                            ])
+                        ]));
+                        const ftBody = el('tbody');
+                        data.recent_failures.forEach(f => {
+                            ftBody.appendChild(el('tr', {}, [
+                                el('td', { class: 'mono', text: String(f.id) }),
+                                el('td', { class: 'mono muted', text: String(f.problem_id) }),
+                                el('td', { class: 'mono muted', text: f.worker_id || '—' }),
+                                el('td', { class: 'num', text: String(f.retry_count ?? 0) }),
+                                el('td', { class: 'muted', text: f.processing_started_at ? formatDate(f.processing_started_at) : '—' })
+                            ]));
+                        });
+                        failTable.appendChild(ftBody);
+                        content.appendChild(el('div', { class: 'table-wrap mb-24' }, [failTable]));
+                    }
+                } catch (err) {
+                    toast(err.message || 'Failed to load jobs', 'error');
+                }
+            }
+
+            // ---- Load Platform Analytics ----
+            async function loadAnalytics(elClicked) {
+                setActiveNav(elClicked);
+                content.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading analytics…</span></div>`;
+
+                try {
+                    const data = await apiFetch('/api/admin/analytics?days=14');
+
+                    content.innerHTML = '';
+                    content.appendChild(el('h1', { text: 'Platform Analytics (14 Days)', style: { marginBottom: '24px' } }));
+
+                    // Aggregate data by day
+                    const byDay = {};
+                    data.forEach(row => {
+                        const day = row.day;
+                        if (!byDay[day]) byDay[day] = { AC: 0, WA: 0, OTHER: 0, total: 0 };
+                        const count = parseInt(row.count, 10);
+                        byDay[day].total += count;
+                        if (row.verdict === 'AC') byDay[day].AC += count;
+                        else if (row.verdict === 'WA') byDay[day].WA += count;
+                        else byDay[day].OTHER += count;
+                    });
+
+                    // Find max for scaling
+                    const maxTotal = Math.max(...Object.values(byDay).map(d => d.total), 1);
+
+                    const chartContainer = el('div', { class: 'chart-container' });
+
+                    Object.keys(byDay).forEach(day => {
+                        const d = byDay[day];
+                        const colHeightPct = (d.total / maxTotal) * 100;
+                        const acPct = d.total > 0 ? (d.AC / d.total) * 100 : 0;
+                        const waPct = d.total > 0 ? (d.WA / d.total) * 100 : 0;
+                        const otherPct = d.total > 0 ? (d.OTHER / d.total) * 100 : 0;
+
+                        const col = el('div', { style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' } }, [
+                            el('div', { style: { height: `${colHeightPct}%`, width: '100%', display: 'flex', flexDirection: 'column', borderRadius: '4px 4px 0 0', overflow: 'hidden' } }, [
+                                el('div', { class: 'chart-bar-segment ac', style: { height: `${acPct}%` } }),
+                                el('div', { class: 'chart-bar-segment wa', style: { height: `${waPct}%` } }),
+                                el('div', { class: 'chart-bar-segment other', style: { height: `${otherPct}%` } })
+                            ]),
+                            el('div', { class: 'chart-label', text: String(day).slice(5) }) // Show MM-DD
+                        ]);
+                        chartContainer.appendChild(col);
+                    });
+
+                    content.appendChild(chartContainer);
+
+                    // Legend
+                    content.appendChild(el('div', { class: 'chart-legend' }, [
+                        el('div', { class: 'chart-legend-item' }, [el('div', { class: 'chart-dot', style: { background: 'var(--tertiary)' } }), el('span', { text: 'Accepted' })]),
+                        el('div', { class: 'chart-legend-item' }, [el('div', { class: 'chart-dot', style: { background: 'var(--danger)' } }), el('span', { text: 'Wrong Answer' })]),
+                        el('div', { class: 'chart-legend-item' }, [el('div', { class: 'chart-dot', style: { background: 'var(--secondary)' } }), el('span', { text: 'Other' })])
+                    ]));
+
+                } catch (err) {
+                    toast(err.message || 'Failed to load analytics', 'error');
                 }
             }
 
