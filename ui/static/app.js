@@ -553,6 +553,22 @@ function renderHeader(activePage) {
         menu.appendChild(avatarLink);
         menu.appendChild(el('span', { text: user.username }));
 
+        // Admin Link
+        if (user.role === 'admin') {
+            const adminLink = el('a', {
+                href: 'admin.html',
+                text: 'Admin',
+                style: {
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: 'var(--tertiary)',
+                    textDecoration: 'none',
+                    marginRight: '12px'
+                }
+            });
+            menu.appendChild(adminLink);
+        }
+
         const themeBtn = menu.querySelector('.theme-toggle');
         if (themeBtn) menu.appendChild(themeBtn);
 

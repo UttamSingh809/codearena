@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <script>
+        // Apply theme immediately (FOUC prevention)
+        (function () {
+            try {
+                var theme = localStorage.getItem('codearena_theme');
+                if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                }
+                document.documentElement.dataset.theme = theme;
+            } catch (e) { document.documentElement.dataset.theme = 'light'; }
+        })();
+    </script>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#FBEDE8">
+    <title>CodeArena — Admin</title>
+    <link rel="stylesheet" href="static/style.css">
+    <style>
+        /* Simple admin layout */
+        .admin-container { display: flex; gap: 32px; }
+        .admin-sidebar { width: 200px; flex-shrink: 0; }
+        .admin-content { flex: 1; min-width: 0; }
+        .admin-nav a {
+            display: block; padding: 12px 16px; color: var(--secondary);
+            text-decoration: none; border-radius: var(--radius-sm);
+            margin-bottom: 4px; font-weight: 500; transition: background 0.15s;
+        }
+        .admin-nav a:hover { background: var(--neutral-deep); color: var(--primary); }
+        .admin-nav a.active { background: var(--tertiary-dim); color: var(--tertiary); }
+    </style>
+</head>
+
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <main id="main-content" class="wide">
+        <div class="admin-container">
+            <!-- Sidebar -->
+            <aside class="admin-sidebar">
+                <h2 style="font-size: 1.2rem; margin-bottom: 24px;">Admin Panel</h2>
+                <nav class="admin-nav">
+                    <a href="#" class="active" id="nav-stats">Overview</a>
+                    <a href="#" id="nav-users">Users</a>
+                    <a href="#" id="nav-problems">Problems</a>
+                    <a href="#" id="nav-jobs">Job Queue</a>
+                </nav>
+            </aside>
+
+            <!-- Main Content Area -->
+            <div class="admin-content" id="admin-content">
+                <div class="loading-block"><span class="spinner lg"></span><span>Loading dashboard…</span></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="static/app.js"></script>
+    <script>
+        'use strict';
+
+        (function () {
+            if (!requireAuth('admin')) return;
+
+            const user = Auth.getUser();
+            // RBAC Check
+            if (!user || user.role !== 'admin') {
+                // Not an admin, redirect
+                location.href = 'dashboard.html';
+                return;
+            }
+
+            const content = document.getElementById('admin-content');
+
+            // Navigation
+            document.getElementById('nav-stats').onclick = (e) => { e.preventDefault(); loadStats(e.target); };
+            document.getElementById('nav-users').onclick = (e) => { e.preventDefault(); loadUsers(e.target); };
+
+            // Placeholder for future tabs
+            document.getElementById('nav-problems').onclick = (e) => { e.preventDefault(); toast('Problem management coming soon', 'info'); };
+            document.getElementById('nav-jobs').onclick = (e) => { e.preventDefault(); toast('Job queue monitor coming soon', 'info'); };
+
+            function setActiveNav(clickedEl) {
+                document.querySelectorAll('.admin-nav a').forEach(a => a.classList.remove('active'));
+                clickedEl.classList.add('active');
+            }
+
+            // ---- Load Overview Stats ----
+            async function loadStats(elClicked) {
+                setActiveNav(elClicked);
+                content.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading stats…</span></div>`;
+
+                try {
+                    const stats = await apiFetch('/api/admin/stats');
+
+                    content.innerHTML = '';
+                    content.appendChild(el('h1', { text: 'Platform Overview', style: { marginBottom: '24px' } }));
+
+                    const grid = el('div', { class: 'card-grid mb-24' });
+                    const statCard = (label, value) => el('div', { class: 'stat' }, [
+                        el('div', { class: 'stat-label', text: label }),
+                        el('div', { class: 'stat-value', text: String(value) })
+                    ]);
+
+                    grid.appendChild(statCard('Total Users', stats.total_users));
+                    grid.appendChild(statCard('Total Problems', stats.total_problems));
+                    grid.appendChild(statCard('Total Submissions', stats.total_submissions));
+                    grid.appendChild(statCard('Pending Jobs', (stats.pending_jobs || 0) + (stats.processing_jobs || 0)));
+
+                    content.appendChild(grid);
+                } catch (err) {
+                    toast(err.message || 'Failed to load stats', 'error');
+                }
+            }
+
+            // ---- Load User Management ----
+            async function loadUsers(elClicked) {
+                setActiveNav(elClicked);
+                content.innerHTML = `<div class="loading-block"><span class="spinner"></span><span>Loading users…</span></div>`;
+
+                try {
+                    const users = await apiFetch('/api/admin/users');
+
+                    content.innerHTML = '';
+                    content.appendChild(el('h1', { text: 'User Management', style: { marginBottom: '24px' } }));
+
+                    const table = el('table');
+                    table.appendChild(el('thead', {}, [
+                        el('tr', {}, [
+                            el('th', { text: 'ID' }),
+                            el('th', { text: 'Username' }),
+                            el('th', { text: 'Email' }),
+                            el('th', { text: 'Role' }),
+                            el('th', { text: 'XP' }),
+                            el('th', { text: 'Joined' })
+                        ])
+                    ]));
+
+                    const tbody = el('tbody');
+                    users.forEach(u => {
+                        tbody.appendChild(el('tr', {}, [
+                            el('td', { class: 'mono muted', text: String(u.id) }),
+                            el('td', { text: u.username }),
+                            el('td', { class: 'muted', text: u.email }),
+                            el('td', {}, [el('span', { class: `badge ${u.role === 'admin' ? 'AC' : 'PENDING'}`, text: u.role })]),
+                            el('td', { class: 'num', text: String(u.xp ?? 0) }),
+                            el('td', { class: 'muted', text: formatDate(u.created_at) })
+                        ]));
+                    });
+                    table.appendChild(tbody);
+
+                    content.appendChild(el('div', { class: 'table-wrap' }, [table]));
+                } catch (err) {
+                    toast(err.message || 'Failed to load users', 'error');
+                }
+            }
+
+            // Load default view
+            loadStats(document.getElementById('nav-stats'));
+
+        })();
+    </script>
+</body>
+</html>
