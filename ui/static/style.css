@@ -3210,3 +3210,81 @@ body.editor-fullscreen #toggle-fullscreen {
 .diff-toggle:hover {
     text-decoration: underline;
 }
+
+/* ============================================================
+ * Saved Snippets
+ * ============================================================ */
+
+.snippet-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: var(--surface);
+    border: 1px solid var(--neutral-deep);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-2);
+    width: 250px;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.snippet-menu.hidden {
+    display: none;
+}
+
+.snippet-item {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--primary);
+    cursor: pointer;
+    border-bottom: 1px solid var(--neutral-deep);
+    transition: background 0.1s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.snippet-item:hover {
+    background: var(--neutral);
+}
+
+.snippet-item:last-child {
+    border-bottom: none;
+}
+
+.snippet-delete {
+    color: var(--danger);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.snippet-item:hover .snippet-delete {
+    opacity: 1;
+}
+
+.snippet-delete:hover {
+    background: var(--danger-bg);
+}
+
+.snippet-add {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--tertiary);
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    background: var(--neutral);
+    transition: background 0.1s;
+}
+
+.snippet-add:hover {
+    background: var(--tertiary-dim);
+}
