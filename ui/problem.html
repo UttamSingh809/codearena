@@ -59,12 +59,9 @@
                         </select>
                     </div>
                     <div class="editor-actions">
-                        <button id="clear-btn" class="btn ghost" title="Clear editor">
-                            Clear
-                        </button>
-                        <button id="submit-btn" class="btn">
-                            Submit
-                        </button>
+                        <button id="run-btn" class="btn secondary" title="Run with custom input">▶ Run</button>
+                        <button id="clear-btn" class="btn ghost" title="Clear editor">Clear</button>
+                        <button id="submit-btn" class="btn">Submit</button>
                     </div>
                 </div>
 
@@ -75,6 +72,35 @@
                         <span id="char-count" class="muted">0 / 65536</span>
                         <span id="save-status" class="muted" aria-live="polite"></span>
                         <span id="submit-status" class="muted" aria-live="polite"></span>
+                    </div>
+                </div>
+
+                <!-- Custom Input / Output Panel -->
+                <div id="custom-run-panel" class="result-card hidden" style="margin-top: 12px;">
+                    <div class="result-header">
+                        <span class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:0.6px;">
+                            Custom Test
+                        </span>
+                        <button id="close-run-btn" class="btn ghost" style="padding: 0; height: auto; font-size: 12px;">Close</button>
+                    </div>
+                
+                    <div style="padding: var(--space-3); border-bottom: 1px solid var(--neutral-deep);">
+                        <label
+                            style="font-size: 11px; text-transform: uppercase; color: var(--secondary); font-weight: 600; display: block; margin-bottom: 6px;">Standard
+                            Input (stdin)</label>
+                        <textarea id="custom-stdin"
+                            style="width: 100%; min-height: 60px; font-family: var(--font-mono); font-size: 12px; padding: 8px; border-radius: 4px; border: 1px solid var(--neutral-deep); background: var(--neutral); color: var(--primary); resize: vertical;"
+                            placeholder="Enter custom input here..."></textarea>
+                    </div>
+                
+                    <div id="custom-output-area" class="hidden" style="padding: var(--space-3);">
+                        <div class="flex" style="justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                            <label
+                                style="font-size: 11px; text-transform: uppercase; color: var(--secondary); font-weight: 600; margin: 0;">Output</label>
+                            <span id="run-runtime" class="muted" style="font-size: 11px;"></span>
+                        </div>
+                        <pre id="custom-stdout" class="code-block" style="min-height: 40px; margin-bottom: 8px; font-size: 12px;"></pre>
+                        <pre id="custom-stderr" class="code-block error-output hidden" style="min-height: 40px; font-size: 12px;"></pre>
                     </div>
                 </div>
 
@@ -109,10 +135,23 @@
             const source = document.getElementById('source');
             const language = document.getElementById('language');
             const submitBtn = document.getElementById('submit-btn');
-            window.addEventListener('keydown', e => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitBtn.disabled) {
+            const runBtn = document.getElementById('run-btn');
+            const closeRunBtn = document.getElementById('close-run-btn');
+            const customRunPanel = document.getElementById('custom-run-panel');
+            const customStdin = document.getElementById('custom-stdin');
+            const customOutputArea = document.getElementById('custom-output-area');
+            const customStdout = document.getElementById('custom-stdout');
+            const customStderr = document.getElementById('custom-stderr');
+            const runRuntime = document.getElementById('run-runtime');
+
+            // Ctrl+Enter runs, Ctrl+Shift+Enter submits
+            window.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && e.shiftKey) {
                     e.preventDefault();
-                    submitBtn.click();
+                    if (!submitBtn.disabled) submitBtn.click();
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!runBtn.disabled) runBtn.click();
                 }
             });
             const clearBtn = document.getElementById('clear-btn');
@@ -219,6 +258,59 @@
                 draftSaved = false;
                 updateCharCount();
                 updateSaveStatus('');
+            });
+
+            closeRunBtn.addEventListener('click', () => {
+                customRunPanel.classList.add('hidden');
+            });
+
+            runBtn.addEventListener('click', async () => {
+                const sourceCode = source.value;
+                if (!sourceCode.trim()) {
+                    toast('Source code is empty', 'warn');
+                    source.focus();
+                    return;
+                }
+
+                runBtn.disabled = true;
+                runBtn.textContent = '⏳ Running...';
+                customRunPanel.classList.remove('hidden');
+                customOutputArea.classList.add('hidden');
+
+                try {
+                    const res = await apiFetch('/api/run', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            language: language.value,
+                            source_code: sourceCode,
+                            stdin: customStdin.value
+                        })
+                    });
+
+                    customOutputArea.classList.remove('hidden');
+
+                    if (res.timed_out) {
+                        runRuntime.textContent = 'Time Limit Exceeded';
+                        runRuntime.style.color = 'var(--warning)';
+                    } else {
+                        runRuntime.textContent = `${res.runtime_ms} ms`;
+                        runRuntime.style.color = 'var(--secondary)';
+                    }
+
+                    customStdout.textContent = res.stdout || '(no output)';
+                    if (res.stderr) {
+                        customStderr.textContent = res.stderr;
+                        customStderr.classList.remove('hidden');
+                    } else {
+                        customStderr.classList.add('hidden');
+                    }
+
+                } catch (err) {
+                    toast(err.message || 'Run failed', 'error');
+                } finally {
+                    runBtn.disabled = false;
+                    runBtn.textContent = '▶ Run';
+                }
             });
 
             // ---- Load the problem -------------------------------------------
